@@ -19,7 +19,7 @@ def get_best_model_name():
     try:
         client = Groq(api_key=api_key)
         # Dynamically find the best available model on the user's specific API key
-        available_models = [m.id for m in client.models.list()]
+        available_models = [m.id for m in client.models.list().data]
         
         preferences = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"]
         for pref in preferences:

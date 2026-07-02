@@ -41,6 +41,17 @@
                         </button>
                     </div>
                 </div>
+                <div class="form-group hidden" id="authRoleSelectorGroup">
+                    <label>System Role</label>
+                    <div class="role-selector">
+                        <button type="button" class="role-btn active" data-role="user" onclick="setSignUpRole('user')">
+                            <i data-lucide="user"></i> Patient
+                        </button>
+                        <button type="button" class="role-btn" data-role="admin" onclick="setSignUpRole('admin')">
+                            <i data-lucide="shield"></i> Doctor/Admin
+                        </button>
+                    </div>
+                </div>
                 <input type="hidden" id="authRole" value="user">
                 <button type="submit" class="btn-primary btn-block" id="btnAuthSubmit">Sign In</button>
             </form>

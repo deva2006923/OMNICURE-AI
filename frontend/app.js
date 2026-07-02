@@ -126,6 +126,7 @@ function toggleAuthMode(isRegister) {
     const subtitle = document.getElementById('authSubtitle');
     const btn = document.getElementById('btnAuthSubmit');
     const toggleText = document.getElementById('authToggleText');
+    const roleSelectorGroup = document.getElementById('authRoleSelectorGroup');
 
     // Reset verification states
     document.getElementById('authVerifyForm').classList.add('hidden');
@@ -140,12 +141,20 @@ function toggleAuthMode(isRegister) {
         subtitle.innerText = 'Register to index and analyze your medical sheets';
         btn.innerText = 'Register';
         toggleText.innerHTML = 'Already have an account? <span onclick="toggleAuthMode(false)">Sign In</span>';
+        if (roleSelectorGroup) {
+            roleSelectorGroup.classList.remove('hidden');
+            setSignUpRole('user');
+        }
     } else {
         authMode = 'login';
         title.innerText = 'Sign In';
         subtitle.innerText = 'Access your medical report intelligence suite';
         btn.innerText = 'Sign In';
         toggleText.innerHTML = 'Don\'t have an account? <span onclick="toggleAuthMode(true)">Create Account</span>';
+        if (roleSelectorGroup) {
+            roleSelectorGroup.classList.add('hidden');
+        }
+        document.getElementById('authRole').value = 'user';
     }
     
     if (window.lucide) {

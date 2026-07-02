@@ -19,6 +19,7 @@ def log_mock_email(to_email: str, otp: str):
 
 def send_verification_email(to_email: str, otp: str) -> bool:
     load_dotenv(override=True)
+    log_mock_email(to_email, otp)
     smtp_email = os.getenv("SMTP_EMAIL")
     smtp_password = os.getenv("SMTP_PASSWORD")
     smtp_host = os.getenv("SMTP_HOST") or "smtp.gmail.com"
@@ -28,9 +29,13 @@ def send_verification_email(to_email: str, otp: str) -> bool:
     except ValueError:
         smtp_port = 465
 
-    
     if not smtp_email or not smtp_password or smtp_email == "your_gmail@gmail.com" or smtp_password == "your_16_digit_google_app_password":
-        raise ValueError("SMTP credentials are not configured in the system settings.")
+        print(f"\n==================================================")
+        print(f"  [MOCK SANDBOX MODE] SMTP NOT CONFIGURED")
+        print(f"  VERIFICATION CODE FOR {to_email}: {otp}")
+        print(f"  Logged to mock_emails.txt")
+        print(f"==================================================\n")
+        return True
         
     subject = "OmniCure AI - Account Verification Code"
     body_html = f"""
