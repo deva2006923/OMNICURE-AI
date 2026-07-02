@@ -83,11 +83,16 @@ def init_db():
     # Clean up legacy admin account if present
     cursor.execute("DELETE FROM users WHERE email = 'admin@omnicure.com'")
     
+    # Demote any non-devaprakassh49 admin accounts to enforce single admin policy
+    cursor.execute("UPDATE users SET role = 'user' WHERE role = 'admin' AND email != 'devaprakassh49@gmail.com'")
+    
     conn.commit()
     conn.close()
 
 # User CRUD
 def register_user(email: str, password: str, otp: str = None, role: str = 'user', is_verified: int = 0) -> dict:
+    if role == 'admin' and email != 'devaprakassh49@gmail.com':
+        role = 'user'
     conn = get_db_connection()
     cursor = conn.cursor()
     

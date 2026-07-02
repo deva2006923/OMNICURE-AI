@@ -84,6 +84,30 @@ class ConfigUpdateRequest(BaseModel):
     smtp_host: str = None
     smtp_port: str = None
 
+def check_admin_access(x_user_id: int):
+    if x_user_id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized: User ID missing")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT role FROM users WHERE id = ?", (x_user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row or row["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden: Admin privileges required")
+
+def get_user_role_from_db(user_id: int) -> str:
+    if not user_id:
+        return "user"
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return row["role"] if row else "user"
+    except Exception:
+        return "user"
+
 # Auth Routes
 @app.post("/api/auth/register")
 def register(request: RegisterRequest, background_tasks: BackgroundTasks):
@@ -92,8 +116,13 @@ def register(request: RegisterRequest, background_tasks: BackgroundTasks):
         # Generate 6-digit OTP
         otp = f"{random.randint(100000, 999999)}"
         
+        # Only devaprakassh49@gmail.com is allowed to register as an admin
+        role = request.role
+        if role == "admin" and request.username != "devaprakassh49@gmail.com":
+            role = "user"
+
         # Save user to database (always requires verification, is_verified=0)
-        user = register_user(request.username, request.password, otp, request.role, is_verified=0)
+        user = register_user(request.username, request.password, otp, role, is_verified=0)
         
         try:
             # Send verification email synchronously to provide instant validation feedback
@@ -134,21 +163,41 @@ def verify(request: VerifyRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.get("/api/auth/session")
+def get_session(x_user_id: int = Header(None)):
+    if not x_user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email as username, role, is_verified FROM users WHERE id = ?", (x_user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="User session not found")
+    return dict(row)
+
 @app.post("/api/auth/login")
 def login(request: LoginRequest, background_tasks: BackgroundTasks):
     validate_email(request.username)
     user = authenticate_user(request.username, request.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # If the account is already verified, bypass OTP verification entirely
+    if user["is_verified"]:
+        return {
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"],
+            "verification_required": False
+        }
         
-    # Generate 6-digit OTP
+    # Generate 6-digit OTP for unverified registrations
     otp = f"{random.randint(100000, 999999)}"
     
-    # Save new OTP to database and temporarily mark user as unverified (is_verified = 0)
-    # so they must verify with the OTP to complete the login session.
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET otp = ?, is_verified = 0 WHERE id = ?", (otp, user["id"]))
+    cursor.execute("UPDATE users SET otp = ? WHERE id = ?", (otp, user["id"]))
     conn.commit()
     conn.close()
     
