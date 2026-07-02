@@ -3,7 +3,10 @@ import sqlite3
 import hashlib
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "disease_prediction.db")
+if os.getenv("VERCEL") == "1":
+    DB_PATH = "/tmp/disease_prediction.db"
+else:
+    DB_PATH = os.path.join(os.path.dirname(__file__), "disease_prediction.db")
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)

@@ -6,7 +6,10 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 def log_mock_email(to_email: str, otp: str):
-    log_path = os.path.join(os.path.dirname(__file__), "mock_emails.txt")
+    if os.getenv("VERCEL") == "1":
+        log_path = "/tmp/mock_emails.txt"
+    else:
+        log_path = os.path.join(os.path.dirname(__file__), "mock_emails.txt")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
         with open(log_path, "a") as f:
