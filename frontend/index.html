@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OmniCure AI | Medical Report Intelligence & Diagnostic Suite</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=5">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="dashboard-theme">
+    <div class="background-mesh"></div>
+    
+    <!-- Auth Overlay Modal (Shown when not logged in) -->
+    <div class="auth-overlay" id="authOverlay">
+        <div class="glass-card auth-card">
+            <div class="auth-header">
+                <div class="logo">
+                    <i data-lucide="activity" class="icon-brand"></i>
+                    <h1>OmniCure AI</h1>
+                </div>
+                <h2 id="authTitle">Sign In</h2>
+                <p id="authSubtitle">Access your medical report intelligence suite</p>
+            </div>
+            
+            <form class="auth-form" id="authMainForm" onsubmit="handleAuthSubmit(event)">
+                <div class="form-group">
+                    <label for="authUsername">Email Address</label>
+                    <div class="input-wrapper">
+                        <i data-lucide="mail" class="input-icon"></i>
+                        <input type="email" id="authUsername" required placeholder="name@company.com">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="authPassword">Password</label>
+                    <div class="input-wrapper">
+                        <i data-lucide="lock" class="input-icon"></i>
+                        <input type="password" id="authPassword" required placeholder="Enter your password">
+                        <button type="button" class="btn-toggle-password" onclick="togglePasswordVisibility(event)">
+                            <i data-lucide="eye" id="togglePasswordIcon"></i>
+                        </button>
+                    </div>
+                </div>
+                <input type="hidden" id="authRole" value="user">
+                <button type="submit" class="btn-primary btn-block" id="btnAuthSubmit">Sign In</button>
+            </form>
+            
+            <!-- OTP Verification Form (Hidden by default) -->
+            <form class="auth-form hidden" id="authVerifyForm" onsubmit="handleVerifySubmit(event)">
+                <div class="verify-icon-wrapper">
+                    <i data-lucide="shield-alert" class="verify-icon"></i>
+                </div>
+                <div class="form-group">
+                    <div class="input-wrapper otp-wrapper">
+                        <i data-lucide="key-round" class="input-icon"></i>
+                        <input type="text" id="authOtp" required placeholder="000000" maxlength="6" pattern="\d{6}" class="otp-input-field">
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary btn-block" id="btnVerifySubmit">Confirm & Authenticate</button>
+                <button type="button" class="btn-secondary btn-block" style="margin-top: 0.5rem;" onclick="cancelVerification()">Back to Sign In</button>
+            </form>
+
+            <div class="auth-toggle" id="authToggleContainer">
+                <p id="authToggleText">Don't have an account? <span onclick="toggleAuthMode(true)">Create Account</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Layout Container (SPA Layout) -->
+    <div class="app-layout">
+        
+        <!-- Sidebar Navigation Drawer -->
+        <aside class="app-sidebar hidden" id="appSidebar">
+            <div class="sidebar-brand">
+                <i data-lucide="activity" class="sidebar-logo-icon"></i>
+                <div class="brand-text">
+                    <h2>OmniCure AI</h2>
+                    <span>Clinical Suite</span>
+                </div>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <button class="sidebar-item active" id="btnNav-dashboard" onclick="showTab('dashboard')">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>Dashboard</span>
+                </button>
+                <button class="sidebar-item" id="btnNav-history" onclick="showTab('history')">
+                    <i data-lucide="archive"></i>
+                    <span>Report Archive</span>
+                </button>
+                <button class="sidebar-item hidden" id="btnNav-admin" onclick="showTab('admin')">
+                    <i data-lucide="shield"></i>
+                    <span>Admin Panel</span>
+                </button>
+                <button class="sidebar-item hidden" id="btnNav-settings" onclick="showTab('settings')">
+                    <i data-lucide="settings"></i>
+                    <span>Integrations</span>
+                </button>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-profile-badge">
+                    <div class="user-avatar" id="sidebarAvatar">U</div>
+                    <div class="user-details">
+                        <span class="user-name" id="navUsername">Patient Name</span>
+                        <span class="user-role" id="navRoleBadge">User</span>
+                    </div>
+                </div>
+                <button class="btn-sidebar-logout" onclick="logout()" title="Logout Session">
+                    <i data-lucide="log-out"></i>
+                    <span>Sign Out</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Canvas -->
+        <main class="main-canvas">
+            
+            <!-- Global Dashboard Banner -->
+            <div id="demoBanner" class="demo-banner hidden">
+                <i data-lucide="alert-triangle" class="banner-icon"></i>
+                <div class="banner-content">
+                    <strong>Developer Sandbox Mode (Mock AI)</strong>
+                    <span>Groq API Key is missing or invalid. Go to the <strong>Integrations</strong> tab to configure your key.</span>
+                </div>
+            </div>
+
+            <!-- Tab: Dashboard -->
+            <div id="tab-dashboard" class="tab-content">
+                <!-- Header Area -->
+                <div class="content-header">
+                    <div>
+                        <h1 class="page-title">Diagnostic Dashboard</h1>
+                        <p class="page-subtitle">Upload and inspect clinical lab sheets for predictive insights</p>
+                    </div>
+                </div>
+
+                <!-- Case 1: Upload View -->
+                <section class="upload-view-container" id="uploadPanel">
+                    <div class="glass-card upload-glass">
+                        <div class="upload-zone" id="dropZone">
+                            <div class="upload-glow-effect"></div>
+                            <div class="upload-icon-circle">
+                                <i data-lucide="upload-cloud"></i>
+                            </div>
+                            <h2>Analyze New Report</h2>
+                            <p>Drag & drop your patient PDF or TXT lab results here, or click to upload</p>
+                            <input type="file" id="fileInput" accept=".pdf,.txt" hidden>
+                            <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+                                <i data-lucide="file-plus"></i> Select Document
+                            </button>
+                        </div>
+                        
+                        <div class="upload-status hidden" id="uploadStatus">
+                            <div class="spinner-box">
+                                <div class="spinner-ring"></div>
+                                <div class="spinner-core"></div>
+                            </div>
+                            <h3>Analyzing Laboratory Metrics</h3>
+                            <p>Querying Groq LLM Engine for health risk predictions and anomalies...</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Case 2: Analysis Report Dashboard (Hidden by default) -->
+                <section class="dashboard-panel hidden" id="dashboardPanel">
+                    <div class="report-meta-card glass-card">
+                        <div class="report-meta-left">
+                            <i data-lucide="file-text" class="meta-icon"></i>
+                            <div>
+                                <h3 id="dashboardReportName">report_filename.pdf</h3>
+                                <span class="meta-date">Uploaded on <strong id="dashboardReportDate">July 1, 2026</strong></span>
+                            </div>
+                        </div>
+                        <button class="btn-nav" onclick="resetToUpload()">
+                            <i data-lucide="upload"></i> Analyze Another File
+                        </button>
+                    </div>
+
+                    <div class="analysis-dashboard-grid">
+                        
+                        <!-- Col 1: Medical Findings -->
+                        <div class="findings-column">
+                            <!-- AI Risk Predictions -->
+                            <div class="glass-card pred-panel">
+                                <div class="panel-header">
+                                    <div class="panel-title-group">
+                                        <i data-lucide="brain-circuit" class="cyan-icon"></i>
+                                        <h3>AI Disease Predictions</h3>
+                                    </div>
+                                    <span class="panel-subtitle">Calculated diagnostic vectors</span>
+                                </div>
+                                <div id="predictionsList" class="predictions-stack">
+                                    <!-- Filled by JS -->
+                                </div>
+                            </div>
+
+                            <!-- Metrics & Anomalies Side by Side -->
+                            <div class="dashboard-subgrid">
+                                <!-- Extracted Lab Metrics -->
+                                <div class="glass-card metrics-panel">
+                                    <div class="panel-header">
+                                        <div class="panel-title-group">
+                                            <i data-lucide="activity" class="indigo-icon"></i>
+                                            <h3>Vital Health Metrics</h3>
+                                        </div>
+                                    </div>
+                                    <div class="metrics-grid" id="metricsList">
+                                        <!-- Filled by JS -->
+                                    </div>
+                                </div>
+
+                                <!-- Detected Abnormalities -->
+                                <div class="glass-card anomalies-panel">
+                                    <div class="panel-header">
+                                        <div class="panel-title-group">
+                                            <i data-lucide="alert-circle" class="rose-icon"></i>
+                                            <h3>Detected Abnormalities</h3>
+                                        </div>
+                                    </div>
+                                    <div class="anomalies-list-wrapper">
+                                        <ul class="anomalies-list" id="abnormalitiesList">
+                                            <!-- Filled by JS -->
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Col 2: Chat Assistant -->
+                        <div class="chat-column">
+                            <div class="glass-card chat-panel">
+                                <div class="chat-header">
+                                    <div class="chat-header-profile">
+                                        <div class="chat-avatar-status">
+                                            <i data-lucide="bot" class="chat-bot-icon"></i>
+                                            <span class="status-indicator-dot online"></span>
+                                        </div>
+                                        <div>
+                                            <h3>RAG Clinical Assistant</h3>
+                                            <span>Real-time report consultations</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="chat-window" id="chatWindow">
+                                    <div class="chat-message bot">
+                                        <p>I have processed the lab results. Ask me any clinical questions regarding ranges, flags, or potential recommendations.</p>
+                                    </div>
+                                </div>
+
+                                <div class="quick-prompts-row">
+                                    <button class="btn-quick-prompt" onclick="sendQuickPrompt('Summarize the critical warning signs in this report')">Summarize warnings</button>
+                                    <button class="btn-quick-prompt" onclick="sendQuickPrompt('What reference range is abnormal?')">Verify ranges</button>
+                                    <button class="btn-quick-prompt" onclick="sendQuickPrompt('Recommend next medical steps')">Next steps</button>
+                                </div>
+
+                                <div class="chat-input-wrapper">
+                                    <input type="text" id="chatInput" placeholder="Ask details about ranges, findings..." onkeypress="handleChatEnter(event)">
+                                    <button class="btn-send" onclick="sendChatMessage()" title="Send query">
+                                        <i data-lucide="send"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Tab: History -->
+            <div id="tab-history" class="tab-content hidden">
+                <div class="content-header">
+                    <div>
+                        <h1 class="page-title">Report Archive</h1>
+                        <p class="page-subtitle">Inspect historical clinical evaluations and predictive runs</p>
+                    </div>
+                </div>
+
+                <div class="glass-card">
+                    <div class="report-list-search-row">
+                        <div class="search-input-wrapper">
+                            <i data-lucide="search" class="search-icon"></i>
+                            <input type="text" id="historySearchInput" placeholder="Filter files by name..." oninput="filterHistoryList()">
+                        </div>
+                    </div>
+                    <div class="report-list-grid" id="sidebarReportList">
+                        <!-- Filled by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Admin Panel -->
+            <div id="tab-admin" class="tab-content hidden">
+                <div class="content-header">
+                    <div>
+                        <h1 class="page-title">Administration Terminal</h1>
+                        <p class="page-subtitle">Manage user permissions, review system telemetry, and inspect authentication code logs</p>
+                    </div>
+                </div>
+
+                <div class="admin-dashboard-layout">
+                    <!-- Users Directory -->
+                    <div class="glass-card admin-panel-box">
+                        <div class="panel-header">
+                            <div class="panel-title-group">
+                                <i data-lucide="users" class="cyan-icon"></i>
+                                <h3>Registered Clinicians & Patients</h3>
+                            </div>
+                        </div>
+                        
+                        <div class="admin-table-container">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Subject Identifier</th>
+                                        <th>System Role</th>
+                                        <th>Date Enrolled</th>
+                                        <th>Telemetry Load</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="adminUsersTableBody">
+                                    <!-- Filled by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Mock Verification Inbox Logs -->
+                    <div class="glass-card admin-panel-box">
+                        <div class="panel-header">
+                            <div class="panel-title-group">
+                                <i data-lucide="mail-warning" class="rose-icon"></i>
+                                <h3>Sandbox Verification Logs (Mock Inbox)</h3>
+                            </div>
+                            <span class="panel-subtitle">Access OTP codes for localhost testing safely</span>
+                        </div>
+                        
+                        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+                            Because security rules block leaking OTP codes to user client interfaces, you can view simulated email deliveries below.
+                        </p>
+
+                        <div class="mock-inbox-scrollbox">
+                            <div class="mock-inbox-stack" id="adminMockEmailsList">
+                                <!-- Filled by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Integrations / Settings -->
+            <div id="tab-settings" class="tab-content hidden">
+                <div class="content-header">
+                    <div>
+                        <h1 class="page-title">Integrations & Settings</h1>
+                        <p class="page-subtitle">Configure medical LLM endpoints and transactional email services</p>
+                    </div>
+                </div>
+
+                <div class="settings-grid">
+                    <!-- Configuration Form -->
+                    <div class="glass-card settings-card">
+                        <div class="panel-header">
+                            <div class="panel-title-group">
+                                <i data-lucide="cpu" class="cyan-icon"></i>
+                                <h3>Clinical API Key</h3>
+                            </div>
+                            <span class="panel-subtitle">Credentials are written securely to backend environment</span>
+                        </div>
+
+                        <form id="settingsConfigForm" onsubmit="handleConfigSubmit(event)" style="margin-top: 1.5rem;">
+                            <div class="form-group">
+                                <label for="configApiKey">Groq API Key</label>
+                                <div class="input-wrapper">
+                                    <i data-lucide="key" class="input-icon"></i>
+                                    <input type="password" id="configApiKey" placeholder="Enter Groq API key...">
+                                </div>
+                                <p class="input-help">Used to query Groq models dynamically. Retrieve a key from Groq Console.</p>
+                            </div>
+                            
+                            <hr class="settings-divider">
+                            
+                            <div class="panel-header" style="margin-bottom: 1.25rem;">
+                                <div class="panel-title-group">
+                                    <i data-lucide="mail" class="indigo-icon"></i>
+                                    <h3>SMTP Notification Engine</h3>
+                                </div>
+                                <span class="panel-subtitle">Enables OTP authentication deliveries</span>
+                            </div>
+
+                             <div class="form-group-row" style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                                 <div class="form-group" style="margin-bottom: 0;">
+                                     <label for="configSmtpHost">SMTP Host</label>
+                                     <div class="input-wrapper">
+                                         <i data-lucide="server" class="input-icon"></i>
+                                         <input type="text" id="configSmtpHost" placeholder="smtp.gmail.com">
+                                     </div>
+                                 </div>
+                                 <div class="form-group" style="margin-bottom: 0;">
+                                     <label for="configSmtpPort">SMTP Port</label>
+                                     <div class="input-wrapper">
+                                         <i data-lucide="hash" class="input-icon"></i>
+                                         <input type="text" id="configSmtpPort" placeholder="465">
+                                     </div>
+                                 </div>
+                             </div>
+
+                             <div class="form-group">
+                                 <label for="configSmtpEmail">SMTP Email Address</label>
+                                 <div class="input-wrapper">
+                                     <i data-lucide="at-sign" class="input-icon"></i>
+                                     <input type="email" id="configSmtpEmail" placeholder="your_email@gmail.com">
+                                 </div>
+                             </div>
+                             
+                             <div class="form-group">
+                                 <label for="configSmtpPassword">SMTP Password / App Password</label>
+                                 <div class="input-wrapper">
+                                     <i data-lucide="lock" class="input-icon"></i>
+                                     <input type="password" id="configSmtpPassword" placeholder="Enter password...">
+                                 </div>
+                                 <p class="input-help">For Gmail, create a 16-digit App Password in Google Account Settings -> Security. Other providers use standard/app passwords.</p>
+                             </div>
+
+                            <button type="submit" class="btn-primary" style="margin-top: 1rem;">
+                                <i data-lucide="save"></i> Apply Changes
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- System Status Panel -->
+                    <div class="glass-card status-card">
+                        <div class="panel-header">
+                            <div class="panel-title-group">
+                                <i data-lucide="shield-check" class="indigo-icon"></i>
+                                <h3>Security & Status</h3>
+                            </div>
+                        </div>
+
+                        <div class="status-list" style="margin-top: 1.5rem;">
+                            <div class="status-item">
+                                <span>Groq Core Engine</span>
+                                <span id="statusGroqBadge" class="status-indicator unconfigured">Checking...</span>
+                            </div>
+                            <div class="status-item">
+                                <span>SMTP Delivery Channel</span>
+                                <span id="statusSmtpBadge" class="status-indicator unconfigured">Checking...</span>
+                            </div>
+                            <div class="status-item">
+                                <span>Database Version</span>
+                                <span class="status-indicator ok">SQLite v3 (Encrypted)</span>
+                            </div>
+                            <div class="status-item">
+                                <span>Mock Sandbox Logger</span>
+                                <span class="status-indicator ok">Active (Fallback)</span>
+                            </div>
+                        </div>
+
+                        <div class="status-instructions" style="margin-top: 2rem;">
+                            <h4>Verification Set-up Guide</h4>
+                            <ol>
+                                <li>Configure **SMTP Gmail Address** and **App Password** to send codes to patients.</li>
+                                <li>If these values are left empty, the app runs in *Mock Sandbox mode*.</li>
+                                <li>In Mock mode, authentication codes will NOT be sent to actual emails. Instead, they write to a local log file.</li>
+                                <li>Administrators can fetch these codes dynamically from the **Admin Panel -> Sandbox Verification Logs** list to register/log in.</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script src="app.js?v=5"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

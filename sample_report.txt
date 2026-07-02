@@ -1,0 +1,22 @@
+PATIENT MEDICAL REPORT
+Patient Name: John Doe
+Age: 54
+Gender: Male
+Date: 2026-06-15
+
+VITAL SIGNS & CLINICAL MEASUREMENTS:
+- Blood Pressure: 145/95 mmHg
+- Heart Rate: 78 bpm
+- Temperature: 98.6 F
+- BMI: 31.2 kg/m2
+
+LABORATORY RESULTS:
+- Fasting Blood Glucose: 165 mg/dL
+- HbA1c: 7.2%
+- Total Cholesterol: 245 mg/dL
+- LDL Cholesterol: 160 mg/dL
+- HDL Cholesterol: 38 mg/dL
+- Triglycerides: 210 mg/dL
+
+CLINICAL NOTES:
+Patient presents with complaints of mild fatigue and increased thirst over the past few weeks. No active chest pain or shortness of breath. Family history includes type 2 diabetes (father) and cardiovascular disease (mother).

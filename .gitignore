@@ -1,0 +1,32 @@
+# Virtual Environment
+backend/venv/
+venv/
+.venv/
+ENV/
+env/
+
+# Environment Secrets (DO NOT COMMIT)
+backend/.env
+.env
+
+# SQLite Database
+backend/disease_prediction.db
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# IDE / OS Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Developer scratchpad scripts
+scratch/
