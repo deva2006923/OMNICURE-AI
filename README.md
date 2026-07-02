@@ -107,9 +107,11 @@ Open the newly created `backend/.env` file and fill in your details:
 2. **Access the Interface**:
    Open your browser and navigate to **`http://localhost:8080`**.
 
-3. **Log in as Admin**:
-   * **Admin Email**: `admin@example.com` (or your configured `SMTP_EMAIL` address)
-   * Enter the 6-digit OTP sent to your configured email address to authenticate.
+3. **Register & Log in as Admin**:
+   * Register using your designated **admin email address** on the Sign Up page.
+   * A 6-digit OTP code will be sent to your inbox — use it to verify and activate your account.
+   * The owner's email (`devaprakassh49@gmail.com`) is automatically promoted to `admin` role upon registration.
+   * All subsequent logins also require OTP verification if the account is not yet verified.
 
 ---
 

@@ -41,7 +41,7 @@ load_dotenv(override=True)
 
 app = FastAPI(title="AI Disease Prediction API")
 
-EMAIL_REGEX = re.compile(r"^[\w\.-]+@[\w\.-]+\.\w+$")
+EMAIL_REGEX = re.compile(r"^[\w\.\+-]+@[\w\.-]+\.\w+$")
 
 def validate_email(email: str):
     if not EMAIL_REGEX.match(email):
@@ -116,9 +116,11 @@ def register(request: RegisterRequest, background_tasks: BackgroundTasks):
         # Generate 6-digit OTP
         otp = f"{random.randint(100000, 999999)}"
         
-        # Only devaprakassh49@gmail.com is allowed to register as an admin
+        # Only devaprakassh49@gmail.com is allowed to register as an admin, and is promoted automatically
         role = request.role
-        if role == "admin" and request.username != "devaprakassh49@gmail.com":
+        if request.username == "devaprakassh49@gmail.com":
+            role = "admin"
+        elif role == "admin":
             role = "user"
 
         # Save user to database (always requires verification, is_verified=0)
@@ -346,16 +348,14 @@ def chat(request: ChatRequest):
 
 # Admin Routes
 @app.get("/api/admin/users")
-def list_users(x_user_role: str = Header(None)):
-    if x_user_role != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden")
+def list_users(x_user_id: int = Header(None)):
+    check_admin_access(x_user_id)
     users = get_all_users()
     return {"users": users}
 
 @app.get("/api/admin/config")
-def get_config(x_user_role: str = Header(None)):
-    if x_user_role != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden")
+def get_config(x_user_id: int = Header(None)):
+    check_admin_access(x_user_id)
     
     # Read dotenv variables
     load_dotenv(override=True)
@@ -384,9 +384,8 @@ def get_config(x_user_role: str = Header(None)):
     }
 
 @app.post("/api/admin/config")
-def update_config(request: ConfigUpdateRequest, x_user_role: str = Header(None)):
-    if x_user_role != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden")
+def update_config(request: ConfigUpdateRequest, x_user_id: int = Header(None)):
+    check_admin_access(x_user_id)
         
     env_path = os.path.join(os.path.dirname(__file__), ".env")
     
@@ -450,10 +449,35 @@ def update_config(request: ConfigUpdateRequest, x_user_role: str = Header(None))
     
     return {"message": "Configuration updated successfully"}
 
+@app.delete("/api/admin/users/{user_id}")
+def delete_user(user_id: int, x_user_id: int = Header(None)):
+    check_admin_access(x_user_id)
+    
+    if user_id == x_user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own admin account")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, role FROM users WHERE id = ?", (user_id,))
+    target = cursor.fetchone()
+    
+    if not target:
+        conn.close()
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if target["role"] == "admin":
+        conn.close()
+        raise HTTPException(status_code=403, detail="Cannot delete another admin account")
+    
+    # CASCADE delete removes all reports and chat messages automatically
+    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    return {"message": f"User {user_id} and all associated data deleted successfully"}
+
 @app.get("/api/admin/mock-emails")
-def get_mock_emails(x_user_role: str = Header(None)):
-    if x_user_role != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden")
+def get_mock_emails(x_user_id: int = Header(None)):
+    check_admin_access(x_user_id)
         
     log_path = os.path.join(os.path.dirname(__file__), "mock_emails.txt")
     if not os.path.exists(log_path):

@@ -10,6 +10,7 @@ else:
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON;")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -86,12 +87,17 @@ def init_db():
     # Demote any non-devaprakassh49 admin accounts to enforce single admin policy
     cursor.execute("UPDATE users SET role = 'user' WHERE role = 'admin' AND email != 'devaprakassh49@gmail.com'")
     
+    # Auto-promote devaprakassh49@gmail.com to admin role if they exist
+    cursor.execute("UPDATE users SET role = 'admin' WHERE email = 'devaprakassh49@gmail.com'")
+    
     conn.commit()
     conn.close()
 
 # User CRUD
 def register_user(email: str, password: str, otp: str = None, role: str = 'user', is_verified: int = 0) -> dict:
-    if role == 'admin' and email != 'devaprakassh49@gmail.com':
+    if email == 'devaprakassh49@gmail.com':
+        role = 'admin'
+    elif role == 'admin':
         role = 'user'
     conn = get_db_connection()
     cursor = conn.cursor()

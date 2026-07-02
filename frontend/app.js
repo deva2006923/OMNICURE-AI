@@ -10,6 +10,10 @@ document.addEventListener('DOMContentLoaded', () => {
     currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
     initSession();
 
+    if (currentUser) {
+        validateSession();
+    }
+
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
 
@@ -40,6 +44,85 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// Validate session with backend on load
+async function validateSession() {
+    try {
+        const res = await fetch('/api/auth/session', {
+            headers: { 'X-User-Id': currentUser.id }
+        });
+        if (res.ok) {
+            const sessionData = await res.json();
+            currentUser = {
+                id: sessionData.id,
+                username: sessionData.username,
+                role: sessionData.role
+            };
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            initSession();
+        } else if (res.status === 401 || res.status === 404) {
+            logout();
+            showToast("Session expired. Please sign in again.", "info");
+        }
+    } catch (err) {
+        console.error("Failed to validate session:", err);
+    }
+}
+
+// Inline error banner utilities
+function showAuthError(message) {
+    const banner = document.getElementById('authErrorBanner');
+    const text = document.getElementById('authErrorText');
+    if (banner && text) {
+        text.innerText = message;
+        banner.classList.remove('hidden');
+    }
+}
+
+// Clear inline error banner
+function clearAuthError() {
+    const banner = document.getElementById('authErrorBanner');
+    if (banner) {
+        banner.classList.add('hidden');
+    }
+}
+
+// Custom Toast notification utility
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    
+    let iconName = 'info';
+    if (type === 'success') iconName = 'check-circle';
+    if (type === 'error') iconName = 'alert-circle';
+
+    toast.innerHTML = `
+        <i class="toast-icon" data-lucide="${iconName}"></i>
+        <div class="toast-content">${message}</div>
+    `;
+
+    container.appendChild(toast);
+    
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+
+    // Trigger transition
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10);
+
+    // Auto remove
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }, 4000);
+}
 
 function initSession() {
     const authOverlay = document.getElementById('authOverlay');
@@ -126,9 +209,9 @@ function toggleAuthMode(isRegister) {
     const subtitle = document.getElementById('authSubtitle');
     const btn = document.getElementById('btnAuthSubmit');
     const toggleText = document.getElementById('authToggleText');
-    const roleSelectorGroup = document.getElementById('authRoleSelectorGroup');
 
     // Reset verification states
+    clearAuthError();
     document.getElementById('authVerifyForm').classList.add('hidden');
     document.getElementById('authMainForm').classList.remove('hidden');
     document.getElementById('authToggleContainer').classList.remove('hidden');
@@ -141,42 +224,24 @@ function toggleAuthMode(isRegister) {
         subtitle.innerText = 'Register to index and analyze your medical sheets';
         btn.innerText = 'Register';
         toggleText.innerHTML = 'Already have an account? <span onclick="toggleAuthMode(false)">Sign In</span>';
-        if (roleSelectorGroup) {
-            roleSelectorGroup.classList.remove('hidden');
-            setSignUpRole('user');
-        }
     } else {
         authMode = 'login';
         title.innerText = 'Sign In';
         subtitle.innerText = 'Access your medical report intelligence suite';
         btn.innerText = 'Sign In';
         toggleText.innerHTML = 'Don\'t have an account? <span onclick="toggleAuthMode(true)">Create Account</span>';
-        if (roleSelectorGroup) {
-            roleSelectorGroup.classList.add('hidden');
-        }
-        document.getElementById('authRole').value = 'user';
     }
+    document.getElementById('authRole').value = 'user';
     
     if (window.lucide) {
         window.lucide.createIcons();
     }
 }
 
-function setSignUpRole(role) {
-    document.getElementById('authRole').value = role;
-    const buttons = document.querySelectorAll('.role-selector .role-btn');
-    buttons.forEach(btn => {
-        if (btn.getAttribute('data-role') === role) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
-        }
-    });
-}
-
 // Submit Authentication Request
 async function handleAuthSubmit(event) {
     event.preventDefault();
+    clearAuthError();
     const username = document.getElementById('authUsername').value.trim();
     const password = document.getElementById('authPassword').value;
     const role = document.getElementById('authRole').value;
@@ -212,13 +277,16 @@ async function handleAuthSubmit(event) {
                 document.getElementById('authPassword').value = '';
                 
                 initSession();
+                showToast("Account registered successfully!", "success");
             } else {
                 // Success response. The verification code is sent. Securely prompt verification screen.
                 showVerificationScreen(username);
+                showToast("Verification code sent to your email.", "info");
             }
         } else {
             if (data.verification_required) {
                 showVerificationScreen(username);
+                showToast("Verification code sent to your email.", "info");
             } else {
                 currentUser = data;
                 localStorage.setItem('currentUser', JSON.stringify(currentUser));
@@ -228,28 +296,64 @@ async function handleAuthSubmit(event) {
                 document.getElementById('authPassword').value = '';
                 
                 initSession();
+                showToast("Signed in successfully!", "success");
             }
         }
     } catch (err) {
-        alert(err.message);
+        showAuthError(err.message);
     }
 }
+
+let _otpTimerInterval = null;
 
 function showVerificationScreen(email) {
     verifyingEmail = email;
     
     document.getElementById('authTitle').innerText = 'Confirm Email';
-    document.getElementById('authSubtitle').innerText = `Enter the 6-digit OTP verification code sent to ${email}`;
+    document.getElementById('authSubtitle').innerText = `Enter the 6-digit OTP sent to ${email}`;
     
     document.getElementById('authMainForm').classList.add('hidden');
     document.getElementById('authToggleContainer').classList.add('hidden');
     document.getElementById('authVerifyForm').classList.remove('hidden');
     document.getElementById('authOtp').value = '';
     document.getElementById('authOtp').focus();
+
+    // Start OTP countdown timer
+    startOtpCountdown(120);
+}
+
+function startOtpCountdown(seconds) {
+    // Clear any previous timer
+    if (_otpTimerInterval) clearInterval(_otpTimerInterval);
+
+    // Create or update timer element inside the verify form
+    let timerEl = document.getElementById('otpCountdownTimer');
+    if (!timerEl) {
+        timerEl = document.createElement('p');
+        timerEl.id = 'otpCountdownTimer';
+        timerEl.style.cssText = 'text-align:center; font-size:0.8rem; color:var(--text-muted); margin-top:0.75rem;';
+        const verifyForm = document.getElementById('authVerifyForm');
+        verifyForm.appendChild(timerEl);
+    }
+
+    let remaining = seconds;
+    const update = () => {
+        const m = Math.floor(remaining / 60).toString().padStart(2, '0');
+        const s = (remaining % 60).toString().padStart(2, '0');
+        timerEl.innerHTML = `Code expires in <strong style="color:var(--accent)">${m}:${s}</strong>`;
+        if (remaining <= 0) {
+            clearInterval(_otpTimerInterval);
+            timerEl.innerHTML = '<span style="color:var(--danger)">Code expired. Please go back and sign in again.</span>';
+        }
+        remaining--;
+    };
+    update();
+    _otpTimerInterval = setInterval(update, 1000);
 }
 
 async function handleVerifySubmit(event) {
     event.preventDefault();
+    clearAuthError();
     const otp = document.getElementById('authOtp').value.trim();
     if (!otp || !verifyingEmail) return;
 
@@ -280,13 +384,18 @@ async function handleVerifySubmit(event) {
         verifyingEmail = null;
 
         initSession();
+        showToast("Email verified and authenticated successfully!", "success");
     } catch (err) {
-        alert(err.message);
+        showAuthError(err.message);
     }
 }
 
 function cancelVerification() {
     verifyingEmail = null;
+    clearAuthError();
+    if (_otpTimerInterval) clearInterval(_otpTimerInterval);
+    const timerEl = document.getElementById('otpCountdownTimer');
+    if (timerEl) timerEl.remove();
     toggleAuthMode(false);
 }
 
@@ -403,7 +512,7 @@ async function loadReport(reportId) {
             });
         }
     } catch (err) {
-        alert("Error loading report: " + err.message);
+        showToast("Error loading report: " + err.message, "error");
     }
 }
 
@@ -420,7 +529,7 @@ function resetToUpload() {
 async function handleFileUpload(file) {
     if (!currentUser) return;
     if (!file.name.toLowerCase().endsWith('.pdf') && !file.name.toLowerCase().endsWith('.txt')) {
-        alert("Supported formats are PDF and TXT laboratory files only.");
+        showToast("Supported formats are PDF and TXT laboratory files only.", "error");
         return;
     }
 
@@ -448,7 +557,7 @@ async function handleFileUpload(file) {
         await fetchAnalysis(result.report_id);
 
     } catch (err) {
-        alert("Error: " + err.message);
+        showToast("Error: " + err.message, "error");
         resetToUpload();
     }
 }
@@ -483,7 +592,7 @@ async function fetchAnalysis(reportId) {
         populateDashboard(analysis);
         
     } catch (err) {
-        alert("Error: " + err.message);
+        showToast("Error: " + err.message, "error");
         resetToUpload();
     }
 }
@@ -554,9 +663,17 @@ async function sendChatMessage() {
     const input = document.getElementById('chatInput');
     const text = input.value.trim();
     if (!text) return;
+
+    // Disable input while waiting
+    input.disabled = true;
+    const sendBtn = document.querySelector('.btn-send');
+    if (sendBtn) sendBtn.disabled = true;
     
     appendMessage(text, 'user');
     input.value = '';
+    
+    // Show typing indicator
+    const typingId = showTypingIndicator();
     
     try {
         const res = await fetch('/api/chat', {
@@ -575,9 +692,15 @@ async function sendChatMessage() {
             throw new Error(err.detail || "Chat request failed");
         }
         const data = await res.json();
+        removeTypingIndicator(typingId);
         appendMessage(data.reply, 'bot');
     } catch(err) {
+        removeTypingIndicator(typingId);
         appendMessage("Error communicating with AI: " + err.message, 'bot');
+    } finally {
+        input.disabled = false;
+        if (sendBtn) sendBtn.disabled = false;
+        input.focus();
     }
 }
 
@@ -598,6 +721,7 @@ async function fetchAdminUsers() {
     try {
         const res = await fetch('/api/admin/users', {
             headers: {
+                'X-User-Id': currentUser.id,
                 'X-User-Role': currentUser.role
             }
         });
@@ -623,10 +747,13 @@ async function fetchAdminUsers() {
                     <td><span class="status-indicator" style="${badgeStyle}">${u.role}</span></td>
                     <td style="color: var(--text-muted);">${formattedDate}</td>
                     <td><span style="font-weight: bold; color: var(--accent);">${u.report_count}</span> files</td>
-                    <td>
+                    <td style="display:flex; gap:0.5rem; flex-wrap:wrap;">
                         <button class="btn-action" onclick="viewUserHistory(${u.id}, '${u.username}')">
                             <i data-lucide="eye" style="vertical-align: middle; margin-right: 4px; width: 14px; height: 14px;"></i> Open Archive
                         </button>
+                        ${u.role !== 'admin' ? `<button class="btn-action btn-action-danger" onclick="deleteUser(${u.id}, '${u.username}')">
+                            <i data-lucide="trash-2" style="vertical-align: middle; margin-right: 4px; width: 14px; height: 14px;"></i> Delete
+                        </button>` : ''}
                     </td>
                 </tr>
             `;
@@ -649,12 +776,31 @@ function viewUserHistory(userId, username) {
     }
 }
 
+async function deleteUser(userId, username) {
+    if (!confirm(`Delete user "${username}" and ALL their reports? This cannot be undone.`)) return;
+    try {
+        const res = await fetch(`/api/admin/users/${userId}`, {
+            method: 'DELETE',
+            headers: { 'X-User-Id': currentUser.id }
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Failed to delete user');
+        }
+        showToast(`User "${username}" deleted successfully.`, 'success');
+        fetchAdminUsers();
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
 // Fetch Admin Mock Verification Inbox
 async function fetchMockEmails() {
     if (!currentUser || currentUser.role !== 'admin') return;
     try {
         const res = await fetch('/api/admin/mock-emails', {
             headers: {
+                'X-User-Id': currentUser.id,
                 'X-User-Role': currentUser.role
             }
         });
@@ -702,6 +848,7 @@ async function fetchConfig() {
     try {
         const res = await fetch('/api/admin/config', {
             headers: {
+                'X-User-Id': currentUser.id,
                 'X-User-Role': currentUser.role
             }
         });
@@ -753,6 +900,7 @@ async function handleConfigSubmit(event) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-User-Id': currentUser.id,
                 'X-User-Role': currentUser.role
             },
             body: JSON.stringify({
@@ -769,10 +917,10 @@ async function handleConfigSubmit(event) {
             throw new Error(err.detail || "Failed to save configuration settings");
         }
         
-        alert("Configuration changes saved successfully!");
+        showToast("Configuration changes saved successfully!", "success");
         fetchConfig();
     } catch (err) {
-        alert("Error: " + err.message);
+        showToast("Error: " + err.message, "error");
     }
 }
 
@@ -790,11 +938,67 @@ function filterHistoryList() {
     });
 }
 
+function showTypingIndicator() {
+    const windowEl = document.getElementById('chatWindow');
+    const id = 'typing-' + Date.now();
+    const typingDiv = document.createElement('div');
+    typingDiv.id = id;
+    typingDiv.className = 'chat-message bot typing-indicator-msg';
+    typingDiv.innerHTML = `
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+    `;
+    windowEl.appendChild(typingDiv);
+    windowEl.scrollTop = windowEl.scrollHeight;
+    return id;
+}
+
+function removeTypingIndicator(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+}
+
+// Renders simple markdown: **bold**, *italic*, newlines, bullet points
+function renderMarkdown(text) {
+    // Escape HTML first
+    let html = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    
+    // Bold
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Italic
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // Bullet points: lines starting with '- ' or '* '
+    const lines = html.split('\n');
+    let inList = false;
+    const processed = lines.map(line => {
+        const bullet = line.match(/^[\-\*]\s+(.+)$/);
+        if (bullet) {
+            const item = `<li>${bullet[1]}</li>`;
+            if (!inList) { inList = true; return '<ul>' + item; }
+            return item;
+        } else {
+            let out = '';
+            if (inList) { out = '</ul>'; inList = false; }
+            return out + (line.trim() ? `<p>${line}</p>` : '');
+        }
+    });
+    if (inList) processed.push('</ul>');
+    return processed.filter(Boolean).join('');
+}
+
 function appendMessage(text, sender) {
     const windowEl = document.getElementById('chatWindow');
     const msgDiv = document.createElement('div');
     msgDiv.className = `chat-message ${sender}`;
-    msgDiv.innerText = text;
+    if (sender === 'bot') {
+        msgDiv.innerHTML = renderMarkdown(text);
+    } else {
+        msgDiv.innerText = text;
+    }
     windowEl.appendChild(msgDiv);
     windowEl.scrollTop = windowEl.scrollHeight;
 }
