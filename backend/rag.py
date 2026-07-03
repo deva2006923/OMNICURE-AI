@@ -266,7 +266,7 @@ Return ONLY a valid JSON object — no markdown, no code fences, no explanation 
             model=model_name,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
-            max_tokens=1500,
+            max_completion_tokens=1500,
         )
         result_text = _strip_markdown_json(response.choices[0].message.content)
         print(f"[RAG] analyze_report raw response ({model_name}): {result_text[:120]}...")
@@ -340,7 +340,7 @@ def ask_question(question: str, custom_text: str = None, chat_history: list = No
             model=model_name,
             messages=messages,
             temperature=0.3,
-            max_tokens=1024,
+            max_completion_tokens=1024,
         )
         reply = response.choices[0].message.content.strip()
 
