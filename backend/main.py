@@ -364,8 +364,10 @@ def list_reports(
     user = get_or_restore_user(x_user_id, x_user_email, x_user_role)
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
-        
-    if user["role"] == "admin":
+    
+    # Always read role from DB — never trust the restored dict's role field
+    db_role = get_user_role_from_db(user["id"])
+    if db_role == "admin":
         reports = get_all_reports()
     else:
         reports = get_user_reports(user["id"])
@@ -386,8 +388,12 @@ def get_report(
     report = get_report_details(report_id)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
-        
-    if user["role"] != "admin" and report["user_id"] != user["id"]:
+    
+    # Always read role from DB
+    db_role = get_user_role_from_db(user["id"])
+    # Ownership: match by DB user_id OR by email (handles cold-start restore where IDs may shift)
+    is_owner = (report["user_id"] == user["id"]) or (x_user_email and report.get("username") == x_user_email)
+    if db_role != "admin" and not is_owner:
         raise HTTPException(status_code=403, detail="Forbidden")
         
     analysis = json.loads(report["analysis_json"]) if report.get("analysis_json") else None
