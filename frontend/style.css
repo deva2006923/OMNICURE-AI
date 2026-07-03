@@ -1600,3 +1600,349 @@ body {
     color: var(--accent);
 }
 
+/* ============================================================
+   PREMIUM ENHANCEMENTS — OmniCure AI v2
+   ============================================================ */
+
+/* Tab transitions — smooth content swapping */
+.tab-content {
+    animation: tabFadeIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes tabFadeIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Glass card staggered entrance delays */
+.glass-card:nth-child(1) { animation-delay: 0.05s; }
+.glass-card:nth-child(2) { animation-delay: 0.10s; }
+.glass-card:nth-child(3) { animation-delay: 0.15s; }
+.glass-card:nth-child(4) { animation-delay: 0.20s; }
+
+/* Panel accent stripe — left glow rule */
+.pred-panel    { border-left: 3px solid var(--accent); }
+.metrics-panel { border-left: 3px solid var(--primary); }
+.anomalies-panel { border-left: 3px solid var(--danger); }
+.chat-panel    { border-left: 3px solid rgba(99, 102, 241, 0.6); }
+
+/* --- Risk Progress Bars inside prediction items --- */
+.risk-bar-wrapper {
+    margin-top: 0.65rem;
+    height: 4px;
+    border-radius: 100px;
+    background: rgba(255, 255, 255, 0.05);
+    overflow: hidden;
+}
+
+.risk-bar {
+    height: 100%;
+    border-radius: 100px;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 0;
+}
+
+.risk-bar.risk-high-bar  { background: linear-gradient(90deg, #ef4444, #f87171); width: 92%; }
+.risk-bar.risk-medium-bar { background: linear-gradient(90deg, #f59e0b, #fbbf24); width: 58%; }
+.risk-bar.risk-low-bar   { background: linear-gradient(90deg, #10b981, #34d399); width: 22%; }
+
+/* --- Online dot pulsing glow --- */
+.status-indicator-dot.online {
+    background: var(--success);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    animation: pulseOnline 2s ease-in-out infinite;
+}
+
+@keyframes pulseOnline {
+    0%   { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+    70%  { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* --- Admin stat summary bar at the top of admin panel --- */
+.admin-stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 1.75rem;
+}
+
+.admin-stat-card {
+    background: rgba(255, 255, 255, 0.015);
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    transition: border-color 0.2s ease;
+    animation: fadeInUp 0.5s ease both;
+}
+
+.admin-stat-card:hover { border-color: rgba(99,102,241,0.3); }
+
+.admin-stat-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.admin-stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    font-family: var(--font-secondary);
+    line-height: 1;
+    background: linear-gradient(135deg, #f3f4f6 30%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* --- Delete / danger action button --- */
+.btn-action-danger {
+    background: rgba(239, 68, 68, 0.08) !important;
+    border-color: rgba(239, 68, 68, 0.2) !important;
+    color: #f87171 !important;
+}
+
+.btn-action-danger:hover {
+    background: rgba(239, 68, 68, 0.85) !important;
+    color: #fff !important;
+}
+
+/* --- Shimmer skeleton loader --- */
+@keyframes shimmer {
+    0%   { background-position: -600px 0; }
+    100% { background-position:  600px 0; }
+}
+
+.shimmer-line {
+    height: 14px;
+    border-radius: 6px;
+    background: linear-gradient(90deg,
+        rgba(255,255,255,0.03) 25%,
+        rgba(255,255,255,0.08) 50%,
+        rgba(255,255,255,0.03) 75%);
+    background-size: 600px 100%;
+    animation: shimmer 1.5s infinite linear;
+    margin-bottom: 0.5rem;
+}
+
+.shimmer-line.short  { width: 45%; }
+.shimmer-line.medium { width: 70%; }
+.shimmer-line.long   { width: 100%; }
+
+/* --- Enhanced OTP digit boxes --- */
+.otp-input-field {
+    letter-spacing: 10px !important;
+    font-size: 1.6rem !important;
+    font-weight: 800 !important;
+    text-align: center;
+    background: rgba(6, 182, 212, 0.03) !important;
+    border-color: rgba(6, 182, 212, 0.2) !important;
+    color: var(--accent) !important;
+    padding-left: 2.5rem !important;
+}
+
+.otp-input-field:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 18px rgba(6, 182, 212, 0.18) !important;
+    background: rgba(6, 182, 212, 0.05) !important;
+}
+
+/* --- Auth card brand shimmer glow --- */
+.auth-header .logo h1 {
+    background: linear-gradient(90deg, #fff 0%, var(--accent) 50%, #fff 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmerText 3s linear infinite;
+}
+
+@keyframes shimmerText {
+    from { background-position: 200% center; }
+    to   { background-position: -200% center; }
+}
+
+/* --- Upload dragover glow ring --- */
+.upload-zone.dragover {
+    border-color: var(--accent) !important;
+    background: rgba(6, 182, 212, 0.04) !important;
+    box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.12),
+                inset 0 0 40px rgba(6, 182, 212, 0.04);
+}
+
+.upload-zone.dragover .upload-icon-circle {
+    background: rgba(6, 182, 212, 0.15);
+    color: var(--accent);
+    transform: scale(1.15);
+    box-shadow: 0 0 25px rgba(6, 182, 212, 0.3);
+}
+
+/* --- Icon brand glow in sidebar --- */
+.sidebar-logo-icon {
+    filter: drop-shadow(0 0 10px rgba(6, 182, 212, 0.5));
+    animation: iconGlow 3s ease-in-out infinite alternate;
+}
+
+@keyframes iconGlow {
+    from { filter: drop-shadow(0 0 6px rgba(6, 182, 212, 0.35)); }
+    to   { filter: drop-shadow(0 0 14px rgba(6, 182, 212, 0.65)); }
+}
+
+/* --- Metric value accent pop animation --- */
+@keyframes metricPop {
+    0%   { transform: scale(0.8); opacity: 0; }
+    70%  { transform: scale(1.08); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.metric-box strong {
+    display: block;
+    animation: metricPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    font-size: 1.1rem;
+    color: var(--accent);
+}
+
+/* --- Chat message bot gradient border --- */
+.chat-message.bot {
+    border-image: linear-gradient(135deg,
+        rgba(99,102,241,0.3) 0%,
+        rgba(6,182,212,0.15) 100%) 1;
+    box-shadow: 0 2px 12px rgba(99, 102, 241, 0.06);
+}
+
+/* --- User message gradient enhancement --- */
+.chat-message.user {
+    background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.25);
+}
+
+/* --- Report card file icon accent --- */
+.report-card:hover .report-card-header svg {
+    filter: drop-shadow(0 0 6px rgba(6, 182, 212, 0.5));
+    transform: scale(1.1);
+    transition: all 0.2s ease;
+}
+
+/* --- Prediction item left accent border on hover --- */
+.prediction-item:hover {
+    border-left: 3px solid var(--accent);
+    padding-left: calc(1.25rem - 2px);
+}
+
+/* --- Sidebar active item glow accent --- */
+.sidebar-item.active {
+    box-shadow: inset 4px 0 10px rgba(99, 102, 241, 0.05);
+}
+
+/* --- Feature highlight: role badge premium gradient --- */
+.user-role {
+    background: linear-gradient(90deg, var(--accent), var(--primary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 700;
+}
+
+/* --- Verify icon wrapper shimmer ring --- */
+.verify-icon-wrapper {
+    animation: verifyPulse 2s ease-in-out infinite;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3);
+}
+
+@keyframes verifyPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
+    50%       { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+}
+
+/* --- Report meta card enhanced border --- */
+.report-meta-card {
+    border-left: 4px solid var(--accent);
+    box-shadow: -4px 0 20px rgba(6, 182, 212, 0.08);
+}
+
+/* --- Premium panel header rule accent lines --- */
+.panel-title-group::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.04), transparent);
+    margin-left: 0.75rem;
+}
+
+/* --- Settings card submit button glowing shimmer --- */
+#settingsConfigForm .btn-primary {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+#settingsConfigForm .btn-primary::after {
+    content: '';
+    position: absolute;
+    top: -50%; left: -60%;
+    width: 40%; height: 200%;
+    background: rgba(255,255,255,0.18);
+    transform: skewX(-20deg);
+    animation: btnShimmer 3s ease-in-out infinite;
+}
+
+@keyframes btnShimmer {
+    0%   { left: -60%; }
+    100% { left: 120%; }
+}
+
+/* --- Notification count badge on sidebar items (future use) --- */
+.sidebar-badge {
+    margin-left: auto;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #f87171;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.1rem 0.4rem;
+    border-radius: 100px;
+    letter-spacing: 0.3px;
+}
+
+/* --- Quick prompt shimmer on hover --- */
+.btn-quick-prompt:hover {
+    background: linear-gradient(90deg,
+        rgba(99,102,241,0.08),
+        rgba(6,182,212,0.06));
+    border-color: var(--accent);
+    color: var(--text-main);
+    box-shadow: 0 2px 10px rgba(6, 182, 212, 0.1);
+}
+
+/* --- Anomaly list entry animation --- */
+.anomalies-list li {
+    animation: slideInLeft 0.3s ease both;
+}
+
+@keyframes slideInLeft {
+    from { opacity: 0; transform: translateX(-12px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+/* --- Search input focus glow --- */
+.search-input-wrapper input:focus {
+    border-color: var(--accent);
+    outline: none;
+    background: rgba(6, 182, 212, 0.02);
+    box-shadow: 0 0 10px rgba(6, 182, 212, 0.1);
+}
+
+/* ---- otp input field class override fix --- */
+.otp-wrapper input {
+    text-align: center;
+    letter-spacing: 10px;
+    font-size: 1.6rem;
+    font-weight: 800;
+    padding-left: 2.5rem;
+    color: var(--accent);
+    background: rgba(6, 182, 212, 0.03);
+    border-color: rgba(6, 182, 212, 0.2);
+}
+

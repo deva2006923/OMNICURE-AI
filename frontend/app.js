@@ -201,6 +201,14 @@ function showTab(tabName) {
     } else if (tabName === 'settings') {
         fetchConfig();
     }
+
+    // Re-trigger tab animation on every switch
+    const activeEl = document.getElementById(`tab-${tabName}`);
+    if (activeEl) {
+        activeEl.style.animation = 'none';
+        void activeEl.offsetWidth; // reflow
+        activeEl.style.animation = '';
+    }
 }
 
 // Authentication toggle
@@ -315,8 +323,20 @@ function showVerificationScreen(email) {
     document.getElementById('authMainForm').classList.add('hidden');
     document.getElementById('authToggleContainer').classList.add('hidden');
     document.getElementById('authVerifyForm').classList.remove('hidden');
-    document.getElementById('authOtp').value = '';
-    document.getElementById('authOtp').focus();
+    const otpInput = document.getElementById('authOtp');
+    otpInput.value = '';
+    otpInput.focus();
+
+    // Auto-submit when 6 digits entered
+    otpInput.addEventListener('input', function otpAutoSubmit() {
+        if (this.value.replace(/\D/g, '').length === 6) {
+            this.value = this.value.replace(/\D/g, '').slice(0, 6);
+            otpInput.removeEventListener('input', otpAutoSubmit);
+            setTimeout(() => {
+                document.getElementById('authVerifyForm').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+            }, 250);
+        }
+    });
 
     // Start OTP countdown timer
     startOtpCountdown(120);
@@ -606,6 +626,7 @@ function populateDashboard(data) {
         data.predictions.forEach(p => {
             const riskStr = (p.risk_level || 'low').toLowerCase();
             const riskClass = 'risk-' + riskStr;
+            const barClass = `risk-${riskStr}-bar`;
             predList.innerHTML += `
                 <div class="prediction-item">
                     <div class="pred-header">
@@ -613,6 +634,9 @@ function populateDashboard(data) {
                         <span class="risk-badge ${riskClass}">${p.risk_level} Risk</span>
                     </div>
                     <p style="color: var(--text-muted); font-size: 0.9rem;">${p.reason}</p>
+                    <div class="risk-bar-wrapper">
+                        <div class="risk-bar ${barClass}"></div>
+                    </div>
                 </div>
             `;
         });
@@ -729,6 +753,17 @@ async function fetchAdminUsers() {
 
         const data = await res.json();
         const users = data.users || [];
+
+        // Update admin stat counters
+        const statUserCount = document.getElementById('statUserCount');
+        const statReportCount = document.getElementById('statReportCount');
+        const statAdminCount = document.getElementById('statAdminCount');
+        if (statUserCount) statUserCount.textContent = users.length;
+        if (statAdminCount) statAdminCount.textContent = users.filter(u => u.role === 'admin').length;
+        if (statReportCount) {
+            const total = users.reduce((sum, u) => sum + (u.report_count || 0), 0);
+            statReportCount.textContent = total;
+        }
 
         const tableBody = document.getElementById('adminUsersTableBody');
         tableBody.innerHTML = '';

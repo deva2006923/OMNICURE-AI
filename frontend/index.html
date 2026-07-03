@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OmniCure AI | Medical Report Intelligence & Diagnostic Suite</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=5">
+    <link rel="stylesheet" href="style.css?v=6">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body class="dashboard-theme">
@@ -59,7 +59,7 @@
                 <div class="form-group">
                     <div class="input-wrapper otp-wrapper">
                         <i data-lucide="key-round" class="input-icon"></i>
-                        <input type="text" id="authOtp" required placeholder="000000" maxlength="6" pattern="\d{6}" class="otp-input-field">
+                        <input type="text" id="authOtp" required placeholder="000000" maxlength="6" pattern="\d{6}" class="otp-input-field" autocomplete="one-time-code" inputmode="numeric">
                     </div>
                 </div>
                 <button type="submit" class="btn-primary btn-block" id="btnVerifySubmit">Confirm & Authenticate</button>
@@ -304,6 +304,22 @@
                     </div>
                 </div>
 
+                <!-- Admin Stats Summary Bar -->
+                <div class="admin-stats-bar" id="adminStatsBar">
+                    <div class="admin-stat-card">
+                        <span class="admin-stat-label">Registered Users</span>
+                        <span class="admin-stat-value" id="statUserCount">—</span>
+                    </div>
+                    <div class="admin-stat-card">
+                        <span class="admin-stat-label">Total Reports</span>
+                        <span class="admin-stat-value" id="statReportCount">—</span>
+                    </div>
+                    <div class="admin-stat-card">
+                        <span class="admin-stat-label">Admin Accounts</span>
+                        <span class="admin-stat-value" id="statAdminCount">—</span>
+                    </div>
+                </div>
+
                 <div class="admin-dashboard-layout">
                     <!-- Users Directory -->
                     <div class="glass-card admin-panel-box">
@@ -482,7 +498,7 @@
     <!-- Toast Notification Container -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <script src="app.js?v=5"></script>
+    <script src="app.js?v=6"></script>
     <script>
         lucide.createIcons();
     </script>
