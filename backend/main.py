@@ -39,7 +39,13 @@ from database import (
 )
 from email_utils import send_verification_email
 
-load_dotenv(override=True)
+# Absolute path to backend/.env
+base_dir = os.path.dirname(os.path.abspath(__file__))
+env_path = os.path.join(base_dir, ".env")
+if os.path.exists(env_path):
+    load_dotenv(dotenv_path=env_path, override=True)
+else:
+    load_dotenv(override=True)
 
 app = FastAPI(title="AI Disease Prediction API")
 
@@ -60,9 +66,30 @@ app.add_middleware(
 @app.on_event("startup")
 def startup_event():
     init_db()
+    
+    # Reload dotenv using absolute path at startup to guarantee fresh environment values
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    env_path = os.path.join(base_dir, ".env")
+    if os.path.exists(env_path):
+        load_dotenv(dotenv_path=env_path, override=True)
+        print(f"[STARTUP] Loaded environment variables from {env_path}")
+    else:
+        print(f"[STARTUP] No local .env file found at {env_path}, relying on system environment variables")
+
+    # Safe presence logging for runtime verification
+    env_keys = ["GROQ_API_KEY", "SMTP_EMAIL", "SMTP_PASSWORD", "SMTP_HOST", "SMTP_PORT"]
+    for key in env_keys:
+        val = os.getenv(key)
+        if val:
+            if val in ("your_api_key_here", "your_gmail@gmail.com", "your_16_digit_google_app_password"):
+                print(f"[STARTUP] Environment variable {key} is present but has a placeholder/dummy value.")
+            else:
+                print(f"[STARTUP] Environment variable {key} is present (length: {len(val)}).")
+        else:
+            print(f"[STARTUP] Environment variable {key} is missing/empty in environment.")
+
     # Seed system_config from environment variables on each startup.
     # This ensures API key / SMTP settings survive Vercel cold-starts that wipe /tmp/ DB.
-    env_keys = ["GROQ_API_KEY", "SMTP_EMAIL", "SMTP_PASSWORD", "SMTP_HOST", "SMTP_PORT"]
     for key in env_keys:
         env_val = os.getenv(key)
         if env_val:

@@ -19,7 +19,12 @@ def log_mock_email(to_email: str, otp: str):
         print(f"Failed to write mock email log: {e}")
 
 def send_verification_email(to_email: str, otp: str) -> bool:
-    load_dotenv(override=True)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    env_path = os.path.join(base_dir, ".env")
+    if os.path.exists(env_path):
+        load_dotenv(dotenv_path=env_path, override=True)
+    else:
+        load_dotenv(override=True)
     log_mock_email(to_email, otp)
     smtp_email = get_system_config("SMTP_EMAIL")
     smtp_password = get_system_config("SMTP_PASSWORD")

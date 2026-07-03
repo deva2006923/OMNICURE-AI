@@ -18,10 +18,21 @@ MODEL_PREFERENCES = [
     "llama-3.3-70b-versatile",
 ]
 
+def load_rag_dotenv():
+    """Load environment variables using absolute path of backend/.env."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    env_path = os.path.join(base_dir, ".env")
+    if os.path.exists(env_path):
+        load_dotenv(dotenv_path=env_path, override=True)
+    else:
+        load_dotenv(override=True)
+
 def _has_valid_api_key() -> bool:
-    load_dotenv(override=True)
+    load_rag_dotenv()
     key = get_system_config("GROQ_API_KEY", "") or ""
-    return bool(key.strip() and key.strip() not in ("your_api_key_here", "dummy_key", ""))
+    is_valid = bool(key.strip() and key.strip() not in ("your_api_key_here", "dummy_key", ""))
+    print(f"[RAG] _has_valid_api_key check: exists={bool(key.strip())}, length={len(key.strip())}, is_valid={is_valid}")
+    return is_valid
 
 def get_groq_client():
     """Create a Groq client using the configured API key."""
@@ -68,7 +79,10 @@ def _safe_content(response) -> str:
     try:
         content = response.choices[0].message.content
         return content.strip() if content else ""
-    except (AttributeError, IndexError, TypeError):
+    except (AttributeError, IndexError, TypeError) as e:
+        import traceback
+        print("[RAG] Error extracting content shape inside _safe_content:")
+        traceback.print_exc()
         return ""
 
 
@@ -86,6 +100,7 @@ def _call_groq(messages: list, max_tokens: int = 1024, temperature: float = 0.3)
     Tries max_tokens first, falls back to max_completion_tokens for older SDK versions.
     Returns the text content or raises an exception.
     """
+    import traceback
     client = get_groq_client()
     model_name = get_best_model_name()
 
@@ -100,18 +115,23 @@ def _call_groq(messages: list, max_tokens: int = 1024, temperature: float = 0.3)
     # Try with max_tokens first (works on most groq SDK versions)
     for token_param in ("max_tokens", "max_completion_tokens"):
         try:
+            print(f"[RAG] Invoking Groq model '{model_name}' using parameter '{token_param}'...")
             response = client.chat.completions.create(**kwargs, **{token_param: max_tokens})
             content = _safe_content(response)
             if content:
                 print(f"[RAG] Got response from {model_name} using {token_param}")
                 return content
+            else:
+                print(f"[RAG] Received empty/invalid content structure using {token_param}")
         except TypeError as e:
             last_error = e
-            print(f"[RAG] TypeError with {token_param}: {e} — trying next param name")
+            print(f"[RAG] TypeError with {token_param} parameter: {e} — trying next fallback.")
+            traceback.print_exc()
             continue
         except Exception as e:
             last_error = e
-            print(f"[RAG] Groq error with {token_param}: {e}")
+            print(f"[RAG] General Groq API error with {token_param}: {e}")
+            traceback.print_exc()
             break
 
     raise last_error or Exception("Groq returned empty content")
@@ -286,7 +306,7 @@ def analyze_report_mock(text: str) -> dict:
 # Groq-powered report analysis
 # ---------------------------------------------------------------------------
 def analyze_report(custom_text: str = None) -> dict:
-    load_dotenv(override=True)
+    load_rag_dotenv()
     text = custom_text if custom_text is not None else global_document_text
     if not text:
         raise Exception("No document text provided")
@@ -327,11 +347,15 @@ Return ONLY a valid JSON object — no markdown, no code fences, no explanation 
                 return parsed
             raise ValueError("Missing expected keys in JSON")
         except (json.JSONDecodeError, ValueError) as parse_err:
+            import traceback
             print(f"[RAG] JSON parse error: {parse_err} — falling back to rule-based")
+            traceback.print_exc()
             return analyze_report_mock(text)
 
     except Exception as e:
+        import traceback
         print(f"[RAG] Groq API error in analyze_report: {e} — falling back to rule-based")
+        traceback.print_exc()
         return analyze_report_mock(text)
 
 
@@ -339,7 +363,7 @@ Return ONLY a valid JSON object — no markdown, no code fences, no explanation 
 # Groq-powered conversational RAG chat
 # ---------------------------------------------------------------------------
 def ask_question(question: str, custom_text: str = None, chat_history: list = None) -> str:
-    load_dotenv(override=True)
+    load_rag_dotenv()
     text = custom_text if custom_text is not None else global_document_text
     if not text:
         raise Exception("No document text available for this report")
@@ -394,10 +418,12 @@ def ask_question(question: str, custom_text: str = None, chat_history: list = No
         return reply
 
     except Exception as e:
+        import traceback
         print(f"[RAG] Groq API error in ask_question: {type(e).__name__}: {e}")
+        traceback.print_exc()
         return (
-            f"⚠️ **AI Chat Error** — Could not get a response from the AI (`{type(e).__name__}`). "
-            "Please try again. If the issue persists, your API key may need to be refreshed in the Integrations tab."
+            f"⚠️ **AI Chat Error** — Could not get a response from the AI (`{type(e).__name__}`: {str(e)}). "
+            "Please check the server console logs for details or verify your API key in the Integrations tab."
         )
 
 
