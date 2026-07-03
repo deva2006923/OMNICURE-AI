@@ -8,20 +8,25 @@ from database import get_system_config
 global_document_text = ""
 _best_model_name = None
 
-# Ordered preference list — most capable first
+# Ordered preference list — verified active Groq models (July 2026)
+# Only fast, reliable models that support chat completions
 MODEL_PREFERENCES = [
-    "llama-3.3-70b-versatile",
-    "meta-llama/llama-4-scout-17b-16e-instruct",
     "llama-3.1-8b-instant",
-    "qwen/qwen3-32b",
+    "llama3-8b-8192",
+    "llama3-70b-8192",
     "gemma2-9b-it",
-    "mixtral-8x7b-32768",
+    "llama-3.3-70b-versatile",
 ]
 
 def _has_valid_api_key() -> bool:
     load_dotenv(override=True)
-    key = get_system_config("GROQ_API_KEY", "")
-    return bool(key and key not in ("your_api_key_here", "dummy_key"))
+    key = get_system_config("GROQ_API_KEY", "") or ""
+    return bool(key.strip() and key.strip() not in ("your_api_key_here", "dummy_key", ""))
+
+def get_groq_client():
+    """Create a Groq client using the configured API key."""
+    api_key = get_system_config("GROQ_API_KEY") or os.getenv("GROQ_API_KEY", "")
+    return Groq(api_key=api_key.strip())
 
 def get_best_model_name() -> str:
     """Return the best available Groq model. Result is cached per process."""
@@ -30,20 +35,26 @@ def get_best_model_name() -> str:
         return _best_model_name
 
     if not _has_valid_api_key():
-        return MODEL_PREFERENCES[0]
+        _best_model_name = MODEL_PREFERENCES[0]
+        return _best_model_name
 
     try:
-        client = Groq(api_key=get_system_config("GROQ_API_KEY"))
+        client = get_groq_client()
         available = {m.id for m in client.models.list().data}
+        print(f"[RAG] Available Groq models: {sorted(available)}")
         for pref in MODEL_PREFERENCES:
             if pref in available:
                 _best_model_name = pref
                 print(f"[RAG] Selected model: {_best_model_name}")
                 return _best_model_name
-        # Fallback: pick first text model from the list
-        text_models = [m for m in available if "/" not in m or "llama" in m.lower()]
+        # Fallback: pick any available text model
+        text_models = sorted([
+            m for m in available
+            if any(x in m.lower() for x in ["llama", "gemma", "mixtral", "qwen", "mistral"])
+        ])
         if text_models:
-            _best_model_name = sorted(text_models)[0]
+            _best_model_name = text_models[0]
+            print(f"[RAG] Fallback model selected: {_best_model_name}")
             return _best_model_name
     except Exception as e:
         print(f"[RAG] Could not list models, defaulting: {e}")
@@ -52,14 +63,58 @@ def get_best_model_name() -> str:
     return _best_model_name
 
 
+def _safe_content(response) -> str:
+    """Safely extract text content from a Groq response, handling None gracefully."""
+    try:
+        content = response.choices[0].message.content
+        return content.strip() if content else ""
+    except (AttributeError, IndexError, TypeError):
+        return ""
+
+
 def _strip_markdown_json(text: str) -> str:
     """Remove ```json ... ``` or ``` ... ``` wrappers from model output."""
     text = text.strip()
-    # Remove opening fence
     text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.IGNORECASE)
-    # Remove closing fence
     text = re.sub(r'\s*```\s*$', '', text)
     return text.strip()
+
+
+def _call_groq(messages: list, max_tokens: int = 1024, temperature: float = 0.3) -> str:
+    """
+    Central Groq API caller with robust error handling.
+    Tries max_tokens first, falls back to max_completion_tokens for older SDK versions.
+    Returns the text content or raises an exception.
+    """
+    client = get_groq_client()
+    model_name = get_best_model_name()
+
+    # Try the call — handle both old and new SDK parameter naming
+    kwargs = {
+        "model": model_name,
+        "messages": messages,
+        "temperature": temperature,
+    }
+
+    last_error = None
+    # Try with max_tokens first (works on most groq SDK versions)
+    for token_param in ("max_tokens", "max_completion_tokens"):
+        try:
+            response = client.chat.completions.create(**kwargs, **{token_param: max_tokens})
+            content = _safe_content(response)
+            if content:
+                print(f"[RAG] Got response from {model_name} using {token_param}")
+                return content
+        except TypeError as e:
+            last_error = e
+            print(f"[RAG] TypeError with {token_param}: {e} — trying next param name")
+            continue
+        except Exception as e:
+            last_error = e
+            print(f"[RAG] Groq error with {token_param}: {e}")
+            break
+
+    raise last_error or Exception("Groq returned empty content")
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +259,7 @@ def analyze_report_mock(text: str) -> dict:
         elif val < 60:
             abnormalities.append(f"Low Heart Rate ({val} bpm — Bradycardia)")
 
-    # Generic fallback line-by-line parser
+    # Generic fallback
     if not metrics:
         for line in text.split('\n'):
             line = line.strip()
@@ -240,9 +295,6 @@ def analyze_report(custom_text: str = None) -> dict:
         print("[RAG] No valid GROQ_API_KEY — using rule-based analyser")
         return analyze_report_mock(text)
 
-    api_key = get_system_config("GROQ_API_KEY")
-    model_name = get_best_model_name()
-
     prompt = f"""You are a clinical diagnostic AI. Analyze the following patient medical report.
 
 REPORT:
@@ -261,19 +313,16 @@ Return ONLY a valid JSON object — no markdown, no code fences, no explanation 
 }}"""
 
     try:
-        client = Groq(api_key=api_key)
-        response = client.chat.completions.create(
-            model=model_name,
+        result_text = _call_groq(
             messages=[{"role": "user", "content": prompt}],
+            max_tokens=1500,
             temperature=0.2,
-            max_completion_tokens=1500,
         )
-        result_text = _strip_markdown_json(response.choices[0].message.content)
-        print(f"[RAG] analyze_report raw response ({model_name}): {result_text[:120]}...")
+        result_text = _strip_markdown_json(result_text)
+        print(f"[RAG] analyze_report raw response: {result_text[:120]}...")
 
         try:
             parsed = json.loads(result_text)
-            # Validate expected keys exist
             if "metrics" in parsed and "predictions" in parsed:
                 return parsed
             raise ValueError("Missing expected keys in JSON")
@@ -295,16 +344,12 @@ def ask_question(question: str, custom_text: str = None, chat_history: list = No
     if not text:
         raise Exception("No document text available for this report")
 
-    api_key = get_system_config("GROQ_API_KEY")
-
     if not _has_valid_api_key():
         return (
             "⚠️ **AI Chat Unavailable** — No Groq API Key is configured on this server. "
             "The rule-based report analysis above is still available. "
             "To enable live AI chat, add your `GROQ_API_KEY` in the Vercel environment variables."
         )
-
-    model_name = get_best_model_name()
 
     system_prompt = (
         "You are OmniCure AI, a professional and compassionate medical report assistant. "
@@ -315,7 +360,7 @@ def ask_question(question: str, custom_text: str = None, chat_history: list = No
 
     messages = [{"role": "system", "content": system_prompt}]
 
-    # Inject the full report as context at the start
+    # Inject the full report as context
     messages.append({
         "role": "user",
         "content": f"Here is the patient medical report:\n\n{text}\n\nPlease use this to answer my questions."
@@ -329,20 +374,18 @@ def ask_question(question: str, custom_text: str = None, chat_history: list = No
     if chat_history:
         for msg in chat_history[:-1]:
             role = "user" if msg["sender"] == "user" else "assistant"
-            messages.append({"role": role, "content": msg["message"]})
+            content = msg.get("message", "")
+            if content:
+                messages.append({"role": role, "content": content})
 
     # Append the current user question
     messages.append({"role": "user", "content": question})
 
     try:
-        client = Groq(api_key=api_key)
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=messages,
-            temperature=0.3,
-            max_completion_tokens=1024,
-        )
-        reply = response.choices[0].message.content.strip()
+        reply = _call_groq(messages=messages, max_tokens=1024, temperature=0.3)
+
+        if not reply:
+            return "⚠️ The AI returned an empty response. Please try again."
 
         # Append disclaimer if model didn't include one
         if "disclaimer" not in reply.lower() and "consult" not in reply.lower():
@@ -351,10 +394,10 @@ def ask_question(question: str, custom_text: str = None, chat_history: list = No
         return reply
 
     except Exception as e:
-        print(f"[RAG] Groq API error in ask_question (model={model_name}): {e}")
+        print(f"[RAG] Groq API error in ask_question: {type(e).__name__}: {e}")
         return (
-            f"⚠️ **AI Chat Error** — The Groq API returned an error: `{type(e).__name__}`. "
-            "Please try again in a moment. If the problem persists, check your API key in the Integrations tab."
+            f"⚠️ **AI Chat Error** — Could not get a response from the AI (`{type(e).__name__}`). "
+            "Please try again. If the issue persists, your API key may need to be refreshed in the Integrations tab."
         )
 
 
