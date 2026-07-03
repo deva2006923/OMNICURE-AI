@@ -34,6 +34,8 @@ from database import (
     save_chat_message,
     get_chat_history,
     get_db_connection,
+    get_system_config,
+    set_system_config,
 )
 from email_utils import send_verification_email
 
@@ -58,6 +60,19 @@ app.add_middleware(
 @app.on_event("startup")
 def startup_event():
     init_db()
+    # Seed system_config from environment variables on each startup.
+    # This ensures API key / SMTP settings survive Vercel cold-starts that wipe /tmp/ DB.
+    env_keys = ["GROQ_API_KEY", "SMTP_EMAIL", "SMTP_PASSWORD", "SMTP_HOST", "SMTP_PORT"]
+    for key in env_keys:
+        env_val = os.getenv(key)
+        if env_val:
+            from database import get_system_config, set_system_config
+            existing = get_system_config(key)
+            # Only seed if not already set in DB (don't overwrite admin-configured values)
+            if not existing or existing in ("your_api_key_here", "your_gmail@gmail.com", "your_16_digit_google_app_password"):
+                set_system_config(key, env_val)
+                print(f"[STARTUP] Seeded system_config.{key} from environment")
+
 
 # Models
 class RegisterRequest(BaseModel):
@@ -84,15 +99,66 @@ class ConfigUpdateRequest(BaseModel):
     smtp_host: str = None
     smtp_port: str = None
 
-def check_admin_access(x_user_id: int):
-    if x_user_id is None:
-        raise HTTPException(status_code=401, detail="Unauthorized: User ID missing")
+def get_or_restore_user(x_user_id: int = None, x_user_email: str = None, x_user_role: str = None):
+    """Resolve the current user from DB. NEVER trusts x_user_role header for privilege elevation."""
+    if not x_user_id:
+        return None
+    
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT role FROM users WHERE id = ?", (x_user_id,))
+    cursor.execute("SELECT id, email, role, is_verified FROM users WHERE id = ?", (x_user_id,))
     row = cursor.fetchone()
+    
+    if row:
+        user = dict(row)
+        conn.close()
+        return user
+        
+    # User not in DB (e.g. Vercel cold-start wiped /tmp DB). Attempt to restore.
+    if x_user_email:
+        # First check if email already exists (different ID row)
+        cursor.execute("SELECT id, email, role, is_verified FROM users WHERE email = ?", (x_user_email,))
+        email_row = cursor.fetchone()
+        if email_row:
+            user = dict(email_row)
+            conn.close()
+            return user
+            
+        # IMPORTANT: Never trust the header role. Only devaprakassh49@gmail.com gets admin.
+        role = "admin" if x_user_email == "devaprakassh49@gmail.com" else "user"
+            
+        from datetime import datetime
+        now = datetime.now().isoformat()
+        try:
+            # INSERT OR IGNORE to avoid PK conflicts on concurrent requests
+            cursor.execute(
+                "INSERT OR IGNORE INTO users (id, email, password_hash, salt, role, is_verified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (x_user_id, x_user_email, "restored_session_hash", "restored_session_salt", role, 1, now)
+            )
+            conn.commit()
+        except Exception as insert_err:
+            print(f"[SESSION_HEAL] Insert failed (non-fatal): {insert_err}")
+        
+        # Fetch back the record (may have been inserted by another request)
+        cursor.execute("SELECT id, email, role, is_verified FROM users WHERE email = ?", (x_user_email,))
+        restored_row = cursor.fetchone()
+        conn.close()
+        if restored_row:
+            restored = dict(restored_row)
+            print(f"[SESSION_HEAL] Restored user session: {x_user_email} (ID: {restored['id']}, Role: {restored['role']})")
+            return restored
+            
     conn.close()
-    if not row or row["role"] != "admin":
+    return None
+
+def check_admin_access(x_user_id: int, x_user_email: str = None, x_user_role: str = None):
+    """Admin check always reads role from DB — header role is completely ignored."""
+    user = get_or_restore_user(x_user_id, x_user_email, x_user_role)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized: User ID missing")
+    # Role is always read from DB, never from the header
+    db_role = get_user_role_from_db(user["id"])
+    if db_role != "admin":
         raise HTTPException(status_code=403, detail="Forbidden: Admin privileges required")
 
 def get_user_role_from_db(user_id: int) -> str:
@@ -116,12 +182,9 @@ def register(request: RegisterRequest, background_tasks: BackgroundTasks):
         # Generate 6-digit OTP
         otp = f"{random.randint(100000, 999999)}"
         
-        # Only devaprakassh49@gmail.com is allowed to register as an admin, and is promoted automatically
-        role = request.role
-        if request.username == "devaprakassh49@gmail.com":
-            role = "admin"
-        elif role == "admin":
-            role = "user"
+        # Role is ALWAYS 'user' except for the designated admin email.
+        # Ignore whatever role the client sends — this cannot be bypassed.
+        role = "admin" if request.username == "devaprakassh49@gmail.com" else "user"
 
         # Save user to database (always requires verification, is_verified=0)
         user = register_user(request.username, request.password, otp, role, is_verified=0)
@@ -166,17 +229,20 @@ def verify(request: VerifyRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/auth/session")
-def get_session(x_user_id: int = Header(None)):
-    if not x_user_id:
+def get_session(
+    x_user_id: int = Header(None),
+    x_user_email: str = Header(None),
+    x_user_role: str = Header(None)
+):
+    user = get_or_restore_user(x_user_id, x_user_email, x_user_role)
+    if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, email as username, role, is_verified FROM users WHERE id = ?", (x_user_id,))
-    row = cursor.fetchone()
-    conn.close()
-    if not row:
-        raise HTTPException(status_code=404, detail="User session not found")
-    return dict(row)
+    return {
+        "id": user["id"],
+        "username": user["email"],
+        "role": user["role"],
+        "is_verified": user["is_verified"]
+    }
 
 @app.post("/api/auth/login")
 def login(request: LoginRequest, background_tasks: BackgroundTasks):
@@ -225,12 +291,17 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks):
 @app.post("/api/upload")
 async def upload_document(
     file: UploadFile = File(...), 
-    x_user_id: int = Header(None)
+    x_user_id: int = Header(None),
+    x_user_email: str = Header(None),
+    x_user_role: str = Header(None)
 ):
     if not file.filename.endswith(('.pdf', '.txt')):
         raise HTTPException(status_code=400, detail="Only PDF and TXT files are supported")
     
-    user_id = x_user_id if x_user_id is not None else 1
+    user = get_or_restore_user(x_user_id, x_user_email, x_user_role)
+    if not user:
+        raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
+    user_id = user["id"]
     
     text = ""
     content = await file.read()
@@ -257,7 +328,13 @@ async def upload_document(
             "report_id": report_id
         }
     except Exception as e:
-         raise HTTPException(status_code=500, detail=f"Failed to index report: {e}")
+        err_str = str(e)
+        if "FOREIGN KEY" in err_str or "foreign key" in err_str.lower():
+            raise HTTPException(
+                status_code=401,
+                detail="Session expired: database was reset. Please sign in again."
+            )
+        raise HTTPException(status_code=500, detail=f"Failed to index report: {e}")
 
 @app.get("/api/analyze")
 def analyze(report_id: int):
@@ -281,15 +358,17 @@ def analyze(report_id: int):
 @app.get("/api/reports")
 def list_reports(
     x_user_id: int = Header(None), 
+    x_user_email: str = Header(None),
     x_user_role: str = Header(None)
 ):
-    if x_user_id is None:
+    user = get_or_restore_user(x_user_id, x_user_email, x_user_role)
+    if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
         
-    if x_user_role == "admin":
+    if user["role"] == "admin":
         reports = get_all_reports()
     else:
-        reports = get_user_reports(x_user_id)
+        reports = get_user_reports(user["id"])
         
     return {"reports": reports}
 
@@ -297,16 +376,18 @@ def list_reports(
 def get_report(
     report_id: int, 
     x_user_id: int = Header(None), 
+    x_user_email: str = Header(None),
     x_user_role: str = Header(None)
 ):
-    if x_user_id is None:
+    user = get_or_restore_user(x_user_id, x_user_email, x_user_role)
+    if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
         
     report = get_report_details(report_id)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
         
-    if x_user_role != "admin" and report["user_id"] != x_user_id:
+    if user["role"] != "admin" and report["user_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Forbidden")
         
     analysis = json.loads(report["analysis_json"]) if report.get("analysis_json") else None
@@ -324,11 +405,27 @@ def get_report(
 
 # Chat Route
 @app.post("/api/chat")
-def chat(request: ChatRequest):
+def chat(
+    request: ChatRequest,
+    x_user_id: int = Header(None),
+    x_user_email: str = Header(None),
+    x_user_role: str = Header(None)
+):
+    user = get_or_restore_user(x_user_id, x_user_email, x_user_role)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     try:
         report = get_report_details(request.report_id)
         if not report:
             raise HTTPException(status_code=404, detail="Report not found")
+            
+        # Role check always uses DB role for accuracy
+        db_role = get_user_role_from_db(user["id"])
+        
+        # Check ownership: admin sees all, otherwise must match by DB user_id OR by email (handles cold-start restore)
+        is_owner = (report["user_id"] == user["id"]) or (x_user_email and report.get("username") == x_user_email)
+        if db_role != "admin" and not is_owner:
+            raise HTTPException(status_code=403, detail="Forbidden")
             
         # Save user message to database
         save_chat_message(request.report_id, "user", request.message)
@@ -343,27 +440,36 @@ def chat(request: ChatRequest):
         save_chat_message(request.report_id, "bot", reply)
         
         return {"reply": reply}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 # Admin Routes
 @app.get("/api/admin/users")
-def list_users(x_user_id: int = Header(None)):
-    check_admin_access(x_user_id)
+def list_users(
+    x_user_id: int = Header(None),
+    x_user_email: str = Header(None),
+    x_user_role: str = Header(None)
+):
+    check_admin_access(x_user_id, x_user_email, x_user_role)
     users = get_all_users()
     return {"users": users}
 
 @app.get("/api/admin/config")
-def get_config(x_user_id: int = Header(None)):
-    check_admin_access(x_user_id)
+def get_config(
+    x_user_id: int = Header(None),
+    x_user_email: str = Header(None),
+    x_user_role: str = Header(None)
+):
+    check_admin_access(x_user_id, x_user_email, x_user_role)
     
-    # Read dotenv variables
-    load_dotenv(override=True)
-    groq_api_key = os.getenv("GROQ_API_KEY") or ""
-    smtp_email = os.getenv("SMTP_EMAIL") or ""
-    smtp_password = os.getenv("SMTP_PASSWORD") or ""
-    smtp_host = os.getenv("SMTP_HOST") or "smtp.gmail.com"
-    smtp_port = os.getenv("SMTP_PORT") or "465"
+    # Read database system_config table first, fallback to environment / .env
+    groq_api_key = get_system_config("GROQ_API_KEY") or ""
+    smtp_email = get_system_config("SMTP_EMAIL") or ""
+    smtp_password = get_system_config("SMTP_PASSWORD") or ""
+    smtp_host = get_system_config("SMTP_HOST") or "smtp.gmail.com"
+    smtp_port = get_system_config("SMTP_PORT") or "465"
     
     # Obfuscate values for security in response
     def obfuscate(val):
@@ -384,61 +490,82 @@ def get_config(x_user_id: int = Header(None)):
     }
 
 @app.post("/api/admin/config")
-def update_config(request: ConfigUpdateRequest, x_user_id: int = Header(None)):
-    check_admin_access(x_user_id)
-        
-    env_path = os.path.join(os.path.dirname(__file__), ".env")
+def update_config(
+    request: ConfigUpdateRequest, 
+    x_user_id: int = Header(None),
+    x_user_email: str = Header(None),
+    x_user_role: str = Header(None)
+):
+    check_admin_access(x_user_id, x_user_email, x_user_role)
     
-    # Read current lines
-    lines = []
-    if os.path.exists(env_path):
-        with open(env_path, "r") as f:
-            lines = f.readlines()
-            
-    # Parse existing values to recreate/update
-    config_dict = {}
-    for line in lines:
-        if "=" in line and not line.strip().startswith("#"):
-            parts = line.strip().split("=", 1)
-            config_dict[parts[0].strip()] = parts[1].strip()
-            
-    # Update provided values (if not obfuscated placeholder)
+    # Update SQLite database system_config table
     if request.groq_api_key and "******" not in request.groq_api_key:
-        config_dict["GROQ_API_KEY"] = request.groq_api_key
+        set_system_config("GROQ_API_KEY", request.groq_api_key)
     if request.smtp_email:
-        config_dict["SMTP_EMAIL"] = request.smtp_email
+        set_system_config("SMTP_EMAIL", request.smtp_email)
     if request.smtp_password and "******" not in request.smtp_password:
-        config_dict["SMTP_PASSWORD"] = request.smtp_password
+        set_system_config("SMTP_PASSWORD", request.smtp_password)
     if request.smtp_host:
-        config_dict["SMTP_HOST"] = request.smtp_host
+        set_system_config("SMTP_HOST", request.smtp_host)
     if request.smtp_port:
-        config_dict["SMTP_PORT"] = request.smtp_port
+        set_system_config("SMTP_PORT", request.smtp_port)
         
-    # Write back to .env file
-    new_lines = []
-    keys_written = set()
+    # Attempt to write to .env file for local dev environments, but wrap in try/except to prevent Vercel crashes (read-only filesystem)
+    try:
+        env_path = os.path.join(os.path.dirname(__file__), ".env")
     
-    # Preserve comments but update keys
-    for line in lines:
-        stripped = line.strip()
-        if "=" in stripped and not stripped.startswith("#"):
-            parts = stripped.split("=", 1)
-            k = parts[0].strip()
-            if k in config_dict:
-                new_lines.append(f"{k}={config_dict[k]}\n")
-                keys_written.add(k)
+        # Read current lines
+        lines = []
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                lines = f.readlines()
+                
+        # Parse existing values to recreate/update
+        config_dict = {}
+        for line in lines:
+            if "=" in line and not line.strip().startswith("#"):
+                parts = line.strip().split("=", 1)
+                config_dict[parts[0].strip()] = parts[1].strip()
+                
+        # Update provided values (if not obfuscated placeholder)
+        if request.groq_api_key and "******" not in request.groq_api_key:
+            config_dict["GROQ_API_KEY"] = request.groq_api_key
+        if request.smtp_email:
+            config_dict["SMTP_EMAIL"] = request.smtp_email
+        if request.smtp_password and "******" not in request.smtp_password:
+            config_dict["SMTP_PASSWORD"] = request.smtp_password
+        if request.smtp_host:
+            config_dict["SMTP_HOST"] = request.smtp_host
+        if request.smtp_port:
+            config_dict["SMTP_PORT"] = request.smtp_port
+            
+        # Write back to .env file
+        new_lines = []
+        keys_written = set()
+        
+        # Preserve comments but update keys
+        for line in lines:
+            stripped = line.strip()
+            if "=" in stripped and not stripped.startswith("#"):
+                parts = stripped.split("=", 1)
+                k = parts[0].strip()
+                if k in config_dict:
+                    new_lines.append(f"{k}={config_dict[k]}\n")
+                    keys_written.add(k)
+                else:
+                    new_lines.append(line)
             else:
                 new_lines.append(line)
-        else:
-            new_lines.append(line)
-            
-    # Add any missing keys
-    for k, v in config_dict.items():
-        if k not in keys_written:
-            new_lines.append(f"{k}={v}\n")
-            
-    with open(env_path, "w") as f:
-        f.writelines(new_lines)
+                
+        # Add any missing keys
+        for k, v in config_dict.items():
+            if k not in keys_written:
+                new_lines.append(f"{k}={v}\n")
+                
+        with open(env_path, "w") as f:
+            f.writelines(new_lines)
+    except Exception as e:
+        print(f"[CONFIG_WRITE] Non-fatal error writing .env file (expected in serverless): {e}")
         
     # Force reload of environment
     load_dotenv(override=True)
@@ -450,8 +577,13 @@ def update_config(request: ConfigUpdateRequest, x_user_id: int = Header(None)):
     return {"message": "Configuration updated successfully"}
 
 @app.delete("/api/admin/users/{user_id}")
-def delete_user(user_id: int, x_user_id: int = Header(None)):
-    check_admin_access(x_user_id)
+def delete_user(
+    user_id: int, 
+    x_user_id: int = Header(None),
+    x_user_email: str = Header(None),
+    x_user_role: str = Header(None)
+):
+    check_admin_access(x_user_id, x_user_email, x_user_role)
     
     if user_id == x_user_id:
         raise HTTPException(status_code=400, detail="Cannot delete your own admin account")
@@ -476,8 +608,12 @@ def delete_user(user_id: int, x_user_id: int = Header(None)):
     return {"message": f"User {user_id} and all associated data deleted successfully"}
 
 @app.get("/api/admin/mock-emails")
-def get_mock_emails(x_user_id: int = Header(None)):
-    check_admin_access(x_user_id)
+def get_mock_emails(
+    x_user_id: int = Header(None),
+    x_user_email: str = Header(None),
+    x_user_role: str = Header(None)
+):
+    check_admin_access(x_user_id, x_user_email, x_user_role)
         
     log_path = os.path.join(os.path.dirname(__file__), "mock_emails.txt")
     if not os.path.exists(log_path):
