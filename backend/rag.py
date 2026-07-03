@@ -3,6 +3,7 @@ import re
 import json
 from groq import Groq
 from dotenv import load_dotenv
+from database import get_system_config
 
 global_document_text = ""
 _best_model_name = None
@@ -19,7 +20,7 @@ MODEL_PREFERENCES = [
 
 def _has_valid_api_key() -> bool:
     load_dotenv(override=True)
-    key = os.getenv("GROQ_API_KEY", "")
+    key = get_system_config("GROQ_API_KEY", "")
     return bool(key and key not in ("your_api_key_here", "dummy_key"))
 
 def get_best_model_name() -> str:
@@ -32,7 +33,7 @@ def get_best_model_name() -> str:
         return MODEL_PREFERENCES[0]
 
     try:
-        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        client = Groq(api_key=get_system_config("GROQ_API_KEY"))
         available = {m.id for m in client.models.list().data}
         for pref in MODEL_PREFERENCES:
             if pref in available:
@@ -239,7 +240,7 @@ def analyze_report(custom_text: str = None) -> dict:
         print("[RAG] No valid GROQ_API_KEY — using rule-based analyser")
         return analyze_report_mock(text)
 
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = get_system_config("GROQ_API_KEY")
     model_name = get_best_model_name()
 
     prompt = f"""You are a clinical diagnostic AI. Analyze the following patient medical report.
@@ -294,7 +295,7 @@ def ask_question(question: str, custom_text: str = None, chat_history: list = No
     if not text:
         raise Exception("No document text available for this report")
 
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = get_system_config("GROQ_API_KEY")
 
     if not _has_valid_api_key():
         return (

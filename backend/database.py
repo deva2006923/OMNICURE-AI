@@ -9,8 +9,12 @@ else:
     DB_PATH = os.path.join(os.path.dirname(__file__), "disease_prediction.db")
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.execute("PRAGMA foreign_keys = ON;")
+    try:
+        conn.execute("PRAGMA journal_mode = WAL;")
+    except Exception:
+        pass
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -78,6 +82,14 @@ def init_db():
             message TEXT NOT NULL,
             timestamp TEXT NOT NULL,
             FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE
+        )
+    """)
+    
+    # Create system_config table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS system_config (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
         )
     """)
     
@@ -275,3 +287,23 @@ def get_chat_history(report_id: int) -> list[dict]:
     chat = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return chat
+
+def get_system_config(key: str, default: str = None) -> str:
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM system_config WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return row["value"]
+    except Exception:
+        pass
+    return os.getenv(key, default)
+
+def set_system_config(key: str, value: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)", (key, value))
+    conn.commit()
+    conn.close()

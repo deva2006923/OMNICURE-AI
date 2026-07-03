@@ -45,11 +45,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// Helper for authentication headers
+function getAuthHeaders(extraHeaders = {}) {
+    const headers = { ...extraHeaders };
+    if (currentUser) {
+        headers['X-User-Id'] = String(currentUser.id);
+        if (currentUser.username) {
+            headers['X-User-Email'] = currentUser.username;
+        }
+        if (currentUser.role) {
+            headers['X-User-Role'] = currentUser.role;
+        }
+    }
+    return headers;
+}
+
 // Validate session with backend on load
 async function validateSession() {
     try {
         const res = await fetch('/api/auth/session', {
-            headers: { 'X-User-Id': currentUser.id }
+            headers: getAuthHeaders()
         });
         if (res.ok) {
             const sessionData = await res.json();
@@ -431,10 +446,7 @@ async function fetchReportHistory(filterUserId = null) {
     if (!currentUser) return;
     try {
         const res = await fetch('/api/reports', {
-            headers: {
-                'X-User-Id': currentUser.id,
-                'X-User-Role': currentUser.role
-            }
+            headers: getAuthHeaders()
         });
         if (!res.ok) throw new Error("Failed to fetch reports archive");
 
@@ -491,10 +503,7 @@ async function fetchReportHistory(filterUserId = null) {
 async function loadReport(reportId) {
     try {
         const res = await fetch(`/api/reports/${reportId}`, {
-            headers: {
-                'X-User-Id': currentUser.id,
-                'X-User-Role': currentUser.role
-            }
+            headers: getAuthHeaders()
         });
         if (!res.ok) {
             const err = await res.json();
@@ -562,9 +571,7 @@ async function handleFileUpload(file) {
     try {
         const uploadRes = await fetch('/api/upload', {
             method: 'POST',
-            headers: {
-                'X-User-Id': currentUser.id
-            },
+            headers: getAuthHeaders(),
             body: formData
         });
         
@@ -702,10 +709,7 @@ async function sendChatMessage() {
     try {
         const res = await fetch('/api/chat', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-User-Id': currentUser.id
-            },
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ 
                 report_id: currentReportId,
                 message: text 
@@ -744,10 +748,7 @@ async function fetchAdminUsers() {
     if (!currentUser || currentUser.role !== 'admin') return;
     try {
         const res = await fetch('/api/admin/users', {
-            headers: {
-                'X-User-Id': currentUser.id,
-                'X-User-Role': currentUser.role
-            }
+            headers: getAuthHeaders()
         });
         if (!res.ok) throw new Error("Failed to load user directory");
 
@@ -816,7 +817,7 @@ async function deleteUser(userId, username) {
     try {
         const res = await fetch(`/api/admin/users/${userId}`, {
             method: 'DELETE',
-            headers: { 'X-User-Id': currentUser.id }
+            headers: getAuthHeaders()
         });
         if (!res.ok) {
             const err = await res.json();
@@ -834,10 +835,7 @@ async function fetchMockEmails() {
     if (!currentUser || currentUser.role !== 'admin') return;
     try {
         const res = await fetch('/api/admin/mock-emails', {
-            headers: {
-                'X-User-Id': currentUser.id,
-                'X-User-Role': currentUser.role
-            }
+            headers: getAuthHeaders()
         });
         if (!res.ok) throw new Error("Failed to load mock sandbox inbox logs");
         const data = await res.json();
@@ -882,10 +880,7 @@ async function fetchConfig() {
     if (!currentUser || currentUser.role !== 'admin') return;
     try {
         const res = await fetch('/api/admin/config', {
-            headers: {
-                'X-User-Id': currentUser.id,
-                'X-User-Role': currentUser.role
-            }
+            headers: getAuthHeaders()
         });
         if (!res.ok) throw new Error("Failed to load system config details");
         const config = await res.json();
@@ -933,11 +928,7 @@ async function handleConfigSubmit(event) {
     try {
         const res = await fetch('/api/admin/config', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-User-Id': currentUser.id,
-                'X-User-Role': currentUser.role
-            },
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
                 groq_api_key: apiKey,
                 smtp_host: smtpHost,

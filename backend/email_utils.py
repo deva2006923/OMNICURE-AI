@@ -4,6 +4,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from dotenv import load_dotenv
+from database import get_system_config
 
 def log_mock_email(to_email: str, otp: str):
     if os.getenv("VERCEL") == "1":
@@ -20,12 +21,12 @@ def log_mock_email(to_email: str, otp: str):
 def send_verification_email(to_email: str, otp: str) -> bool:
     load_dotenv(override=True)
     log_mock_email(to_email, otp)
-    smtp_email = os.getenv("SMTP_EMAIL")
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    smtp_host = os.getenv("SMTP_HOST") or "smtp.gmail.com"
+    smtp_email = get_system_config("SMTP_EMAIL")
+    smtp_password = get_system_config("SMTP_PASSWORD")
+    smtp_host = get_system_config("SMTP_HOST") or "smtp.gmail.com"
     
     try:
-        smtp_port = int(os.getenv("SMTP_PORT") or 465)
+        smtp_port = int(get_system_config("SMTP_PORT") or 465)
     except ValueError:
         smtp_port = 465
 
@@ -78,11 +79,7 @@ def send_verification_email(to_email: str, otp: str) -> bool:
         return True
     except Exception as e:
         print(f"SMTP failed to send email to {to_email} via {smtp_host}:{smtp_port}: {e}")
-        # If SMTP fails due to cloud firewall port blocking, print the OTP to the console logs so the user can retrieve it.
-        print(f"\n==================================================")
-        print(f"  [CLOUD FIREWALL FALLBACK] OUTGOING MAIL BLOCKED")
-        print(f"  VERIFICATION CODE FOR {to_email}: {otp}")
-        print(f"==================================================\n")
-        return True
+        # If SMTP fails due to credential errors or network drops, raise the error so the database rolls back
+        raise e
 
 
